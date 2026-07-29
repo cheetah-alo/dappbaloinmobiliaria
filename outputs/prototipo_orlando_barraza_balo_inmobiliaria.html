@@ -1,0 +1,500 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Propuesta conceptual de Balo Inmobiliaria para Orlando Barraza.">
+  <title>Orlando Barraza · Balo Inmobiliaria</title>
+  <style>
+    :root {
+      --ivory: #f7f4ee;
+      --ivory-soft: #fcfaf6;
+      --sand: #e5ddd1;
+      --sand-deep: #d0c0ae;
+      --ink: #102d36;
+      --ink-mid: #1e4650;
+      --ink-soft: #61767a;
+      --line: #b6c0bd;
+      --coral: #e27a62;
+      --sage: #789e92;
+      --gold: #c69a4a;
+      --white: #fffefa;
+      --serif: Georgia, "Times New Roman", serif;
+      --sans: Arial, Helvetica, sans-serif;
+      --shadow: 0 28px 80px rgba(16, 45, 54, .16);
+      --ease: cubic-bezier(.22,.72,.23,1);
+    }
+
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; overflow: hidden; }
+    body { background: var(--ivory); color: var(--ink); font-family: var(--sans); }
+    button, a { -webkit-tap-highlight-color: transparent; font: inherit; }
+    button { border: 0; }
+
+    .deck { height: 100%; position: relative; }
+    .deck-header {
+      align-items: center; display: flex; justify-content: space-between; left: 0;
+      padding: 22px 30px; pointer-events: none; position: fixed; right: 0; top: 0; z-index: 30;
+    }
+    .brand { align-items: baseline; display: flex; gap: 13px; pointer-events: auto; }
+    .brand strong { font-family: var(--serif); font-size: 1rem; font-weight: 400; letter-spacing: .13em; }
+    .brand span, .demo-flag { font-size: .62rem; letter-spacing: .16em; text-transform: uppercase; }
+    .brand span { color: var(--ink-soft); }
+    .demo-flag {
+      align-items: center; background: color-mix(in srgb, var(--ivory-soft) 83%, transparent);
+      border: 1px solid color-mix(in srgb, var(--ink) 25%, transparent); border-radius: 999px;
+      display: flex; gap: 8px; padding: 9px 12px; pointer-events: auto; backdrop-filter: blur(10px);
+    }
+    .demo-flag::before { background: var(--coral); border-radius: 50%; content: ""; height: 6px; width: 6px; }
+
+    .scene {
+      align-items: center; display: none; height: 100dvh; isolation: isolate; overflow-y: auto;
+      padding: 92px max(30px, calc((100vw - 1240px) / 2 + 30px)) 96px; position: absolute; width: 100%;
+    }
+    .scene.active { animation: sceneIn 620ms var(--ease) both; display: flex; }
+    .scene.leaving { animation: sceneOut 260ms ease both; display: flex; }
+    @keyframes sceneIn { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes sceneOut { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(-14px); } }
+    .scene-cover { background: var(--ivory); }
+    .scene-journey, .scene-workspace { background: var(--ivory-soft); }
+    .scene-analytics { background: var(--ink); color: var(--ivory-soft); }
+    .scene-operations { background: var(--sand); }
+    .scene-close { background: var(--coral); }
+    .scene-inner { margin: auto; max-width: 1240px; width: 100%; }
+
+    .eyebrow { align-items: center; display: flex; font-size: .65rem; gap: 12px; letter-spacing: .2em; margin: 0 0 25px; text-transform: uppercase; }
+    .eyebrow::before { background: currentColor; content: ""; height: 1px; width: 42px; }
+    .display { font-family: var(--serif); font-size: clamp(3.2rem, 7.4vw, 7.6rem); font-weight: 400; letter-spacing: -.055em; line-height: .86; margin: 0; }
+    .display em, .scene-title em, .close-title em { color: var(--coral); font-weight: 400; }
+    .display .sage { color: var(--sage); }
+    .lead { color: var(--ink-soft); font-family: var(--serif); font-size: clamp(1.05rem, 1.7vw, 1.35rem); line-height: 1.55; margin: 30px 0 0; max-width: 660px; }
+    .cover-actions, .close-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 36px; }
+    .action { align-items: center; background: transparent; border: 1px solid var(--ink); border-radius: 999px; color: var(--ink); cursor: pointer; display: inline-flex; font-size: .7rem; gap: 11px; justify-content: center; letter-spacing: .12em; min-height: 48px; padding: 0 20px; text-transform: uppercase; transition: transform 160ms ease, background 160ms ease, color 160ms ease; }
+    .action:hover { transform: translateY(-2px); }
+    .action.primary { background: var(--ink); color: var(--ivory-soft); }
+    .scene-cover .scene-inner { align-items: center; display: grid; gap: 50px; grid-template-columns: minmax(0, 1.08fr) minmax(330px, .92fr); }
+
+    .cover-art { align-items: center; display: flex; justify-content: center; min-height: 520px; position: relative; }
+    .cover-art::before { border: 1px solid var(--line); border-radius: 48% 52% 45% 55% / 38% 39% 61% 62%; content: ""; height: 510px; position: absolute; transform: rotate(-7deg); width: 350px; }
+    .cover-art::after { background: var(--coral); border-radius: 52% 48% 46% 54% / 44% 58% 42% 56%; content: ""; height: 90px; position: absolute; right: 13%; top: 20%; transform: rotate(12deg); width: 66px; }
+    .cover-card { background: linear-gradient(150deg, #0f313b 0%, #1d5760 58%, #789e92 170%); border: 1px solid var(--ink); box-shadow: var(--shadow); color: var(--ivory-soft); display: flex; flex-direction: column; height: 410px; justify-content: space-between; padding: 28px; position: relative; transform: rotate(2deg); width: 290px; z-index: 2; }
+    .cover-card::after { border: 1px solid rgba(255,255,255,.48); bottom: 14px; content: ""; left: 14px; pointer-events: none; position: absolute; right: 14px; top: 14px; }
+    .cover-card small, .cover-card span, .cover-card p { position: relative; z-index: 1; }
+    .cover-card small { font-family: var(--serif); letter-spacing: .15em; }
+    .cover-card p { color: #ffe8cb; font-family: var(--serif); font-size: 3.5rem; line-height: .88; margin: 0; text-align: right; }
+    .cover-card span { font-size: .6rem; letter-spacing: .16em; text-transform: uppercase; }
+
+    .scene-title-row { align-items: end; display: grid; gap: 34px; grid-template-columns: minmax(0, 1fr) minmax(280px, .43fr); margin-bottom: 42px; }
+    .scene-title { font-family: var(--serif); font-size: clamp(2.8rem, 5.5vw, 5.7rem); font-weight: 400; letter-spacing: -.045em; line-height: .93; margin: 0; }
+    .scene-description { color: var(--ink-soft); line-height: 1.65; margin: 0; }
+    .scene-analytics .scene-description { color: #d0d8d4; }
+
+    .journey-grid { border-bottom: 1px solid var(--line); border-top: 1px solid var(--line); display: grid; grid-template-columns: repeat(6, 1fr); }
+    .journey-step { min-height: 295px; padding: 23px 18px; position: relative; }
+    .journey-step:not(:last-child) { border-right: 1px solid var(--line); }
+    .journey-step .num { color: var(--coral); display: block; font-family: var(--serif); font-size: .78rem; margin-bottom: 62px; }
+    .journey-step h3 { font-family: var(--serif); font-size: 1.35rem; font-weight: 400; line-height: 1.08; margin: 0 0 13px; }
+    .journey-step p { color: var(--ink-soft); font-size: .72rem; line-height: 1.5; margin: 0; }
+    .journey-step .data { bottom: 20px; color: var(--ink-soft); font-size: .58rem; left: 18px; letter-spacing: .1em; position: absolute; right: 18px; text-transform: uppercase; }
+    .journey-note { align-items: center; display: flex; font-family: var(--serif); font-size: 1rem; gap: 13px; margin: 26px 0 0 auto; max-width: 630px; }
+    .journey-note::before { background: var(--sage); border-radius: 50%; content: ""; flex: 0 0 auto; height: 9px; width: 9px; }
+
+    .workspace-grid { display: grid; gap: 24px; grid-template-columns: .86fr 1.14fr; }
+    .panel { background: var(--white); border: 1px solid var(--line); min-height: 465px; padding: 28px; }
+    .panel.elevated { box-shadow: var(--shadow); }
+    .panel-label { color: var(--coral); display: block; font-size: .62rem; letter-spacing: .16em; margin-bottom: 17px; text-transform: uppercase; }
+    .person-head { align-items: center; display: flex; gap: 13px; margin-bottom: 27px; }
+    .avatar { align-items: center; background: var(--sand); border-radius: 50%; display: flex; font-family: var(--serif); height: 46px; justify-content: center; width: 46px; }
+    .person-head strong { display: block; font-family: var(--serif); font-size: 1.15rem; font-weight: 400; }
+    .person-head small { color: var(--ink-soft); }
+    .timeline { border-top: 1px solid var(--line); }
+    .timeline-row { align-items: start; border-bottom: 1px solid var(--line); display: grid; gap: 12px; grid-template-columns: 12px 1fr auto; padding: 16px 0; }
+    .timeline-dot { background: var(--coral); border-radius: 50%; height: 7px; margin-top: 5px; width: 7px; }
+    .timeline-row strong { display: block; font-family: var(--serif); font-size: .94rem; font-weight: 400; }
+    .timeline-row span, .timeline-row time { color: var(--ink-soft); font-size: .68rem; }
+    .timeline-row time { letter-spacing: .08em; }
+    .status-line { align-items: center; border-top: 1px solid var(--line); display: flex; font-size: .68rem; justify-content: space-between; margin-top: 19px; padding-top: 15px; }
+    .status-pill { background: var(--sand); border-radius: 999px; padding: 5px 9px; }
+    .trace-tool { display: grid; gap: 25px; grid-template-columns: minmax(185px, .7fr) 1fr; margin-top: 22px; }
+    .prop-card { background: var(--ink); color: var(--ivory-soft); display: flex; flex-direction: column; justify-content: space-between; min-height: 345px; padding: 24px; position: relative; }
+    .prop-card::before { border: 1px solid rgba(255,255,255,.24); content: ""; inset: 14px; pointer-events: none; position: absolute; }
+    .prop-card > * { position: relative; z-index: 1; }
+    .prop-code { color: #a9cdc0; font-size: .6rem; letter-spacing: .16em; text-transform: uppercase; }
+    .prop-card h3 { font-family: var(--serif); font-size: 2rem; font-weight: 400; letter-spacing: -.04em; line-height: .96; margin: 13px 0 0; }
+    .prop-card p { color: #d0d8d4; font-size: .7rem; line-height: 1.55; margin: 0; }
+    .agent-roles { display: grid; gap: 7px; }
+    .role-row { align-items: center; border: 1px solid var(--line); cursor: pointer; display: grid; gap: 8px; grid-template-columns: 10px 1fr auto; padding: 11px 13px; text-align: left; transition: background 160ms ease, color 160ms ease; }
+    .role-row.active { background: var(--ink); border-color: var(--ink); color: var(--ivory-soft); }
+    .role-dot { background: var(--coral); border-radius: 50%; height: 7px; width: 7px; }
+    .role-row span:not(.role-dot) { font-family: var(--serif); font-size: 1rem; }
+    .role-row small { font-size: .58rem; letter-spacing: .08em; text-transform: uppercase; }
+    .role-summary { border-top: 1px solid var(--line); margin-top: 18px; padding-top: 16px; }
+    .role-summary strong { display: block; font-family: var(--serif); font-size: 1.25rem; font-weight: 400; margin-bottom: 8px; }
+    .role-summary p { color: var(--ink-soft); font-size: .72rem; line-height: 1.5; margin: 0; }
+
+    .analytics-grid { display: grid; gap: 26px; grid-template-columns: .6fr 1.4fr; }
+    .content-tabs { align-content: start; display: grid; gap: 8px; }
+    .content-tab { background: transparent; border: 1px solid #5e7275; color: var(--ivory-soft); cursor: pointer; display: flex; justify-content: space-between; padding: 17px 18px; text-align: left; }
+    .content-tab.active { background: var(--ivory-soft); color: var(--ink); }
+    .content-tab span:first-child { font-family: var(--serif); font-size: 1.2rem; }
+    .content-tab span:last-child { font-size: .58rem; letter-spacing: .1em; text-transform: uppercase; }
+    .analytics-panel { border: 1px solid #5e7275; padding: 27px; }
+    .sample-label { color: #f0c987; font-size: .6rem; letter-spacing: .14em; text-transform: uppercase; }
+    .analytics-head { align-items: end; display: flex; justify-content: space-between; margin: 15px 0 27px; }
+    .analytics-head h3 { font-family: var(--serif); font-size: 2.3rem; font-weight: 400; margin: 0; }
+    .analytics-head p { color: #d0d8d4; font-size: .7rem; margin: 0; }
+    .funnel { display: grid; gap: 14px; }
+    .funnel-row { align-items: center; display: grid; gap: 14px; grid-template-columns: 104px 1fr 56px; }
+    .funnel-row label { color: #d0d8d4; font-size: .68rem; }
+    .funnel-track { background: #294d53; height: 8px; overflow: hidden; }
+    .funnel-fill { background: var(--coral); display: block; height: 100%; transition: width 300ms ease; }
+    .funnel-row output { font-family: var(--serif); text-align: right; }
+    .analytics-stats { border-top: 1px solid #5e7275; display: grid; grid-template-columns: repeat(3, 1fr); margin-top: 25px; padding-top: 20px; }
+    .analytics-stat:not(:last-child) { border-right: 1px solid #5e7275; margin-right: 18px; padding-right: 18px; }
+    .analytics-stat span { color: #d0d8d4; display: block; font-size: .58rem; letter-spacing: .09em; margin-bottom: 8px; text-transform: uppercase; }
+    .analytics-stat strong { color: #ffe8cb; font-family: var(--serif); font-size: 1.6rem; font-weight: 400; }
+    .analytics-insight { border-left: 2px solid var(--sage); color: #d0d8d4; font-family: var(--serif); font-size: .95rem; line-height: 1.5; margin-top: 27px; padding-left: 15px; }
+
+    .operations-grid { display: grid; gap: 24px; grid-template-columns: .86fr 1.14fr; }
+    .source-card, .publication-card { background: var(--white); border: 1px solid var(--line); min-height: 326px; padding: 28px; }
+    .source-card h3, .publication-card h3 { font-family: var(--serif); font-size: 1.9rem; font-weight: 400; letter-spacing: -.03em; margin: 0 0 19px; }
+    .source-box { border: 1px solid var(--line); }
+    .source-row { align-items: baseline; border-bottom: 1px solid var(--line); display: grid; gap: 14px; grid-template-columns: 82px 1fr; padding: 12px 13px; }
+    .source-row:last-child { border-bottom: 0; }
+    .source-row span { color: var(--ink-soft); font-size: .62rem; letter-spacing: .08em; text-transform: uppercase; }
+    .source-row strong { font-family: var(--serif); font-size: .84rem; font-weight: 400; }
+    .operation-note { color: var(--ink-soft); font-size: .72rem; line-height: 1.55; margin: 18px 0 0; }
+    .publish-table { border-collapse: collapse; font-size: .73rem; width: 100%; }
+    .publish-table th { border-bottom: 1px solid var(--line); color: var(--ink-soft); font-size: .58rem; font-weight: 400; letter-spacing: .1em; padding: 0 0 10px; text-align: left; text-transform: uppercase; }
+    .publish-table td { border-bottom: 1px solid var(--line); font-family: var(--serif); padding: 13px 0; }
+    .publish-table tr:last-child td { border-bottom: 0; }
+    .channel-status { background: #dcebe4; border-radius: 999px; color: var(--ink); display: inline-block; font-family: var(--sans); font-size: .56rem; letter-spacing: .08em; padding: 5px 8px; text-transform: uppercase; }
+    .channel-status.waiting { background: #f4dfc4; }
+    .validate-button { background: var(--ink); color: var(--ivory-soft); cursor: pointer; font-size: .65rem; letter-spacing: .12em; margin-top: 21px; min-height: 45px; padding: 0 17px; text-transform: uppercase; transition: background 160ms ease; }
+    .validate-button.done { background: var(--sage); }
+    .value-strip { border-top: 1px solid var(--line); display: grid; grid-template-columns: repeat(4, 1fr); margin-top: 28px; }
+    .value-item { display: flex; flex-direction: column; gap: 13px; min-height: 104px; padding: 18px 16px; }
+    .value-item:not(:last-child) { border-right: 1px solid var(--line); }
+    .value-item span { color: var(--coral); font-family: var(--serif); font-size: .8rem; }
+    .value-item strong { font-family: var(--serif); font-size: .96rem; font-weight: 400; line-height: 1.15; }
+
+    .close-grid { align-items: center; display: grid; gap: 70px; grid-template-columns: 1fr .85fr; }
+    .close-title { color: var(--ink); font-family: var(--serif); font-size: clamp(3.2rem, 6.2vw, 6.5rem); font-weight: 400; letter-spacing: -.055em; line-height: .88; margin: 0; }
+    .close-title em { color: var(--ivory-soft); }
+    .pilot { border-top: 1px solid rgba(16,45,54,.48); }
+    .pilot > p { color: var(--ink-mid); font-family: var(--serif); font-size: 1.17rem; line-height: 1.5; margin: 0; padding: 20px 0 25px; }
+    .pilot-row { align-items: center; border-top: 1px solid rgba(16,45,54,.35); display: grid; gap: 20px; grid-template-columns: 35px 1fr; padding: 15px 0; }
+    .pilot-row span { color: var(--ivory-soft); font-family: var(--serif); }
+    .pilot-row strong { font-family: var(--serif); font-size: 1rem; font-weight: 400; }
+    .scene-close .action { border-color: var(--ink); }
+    .scene-close .action.primary { background: var(--ink); color: var(--ivory-soft); }
+
+    .deck-controls { align-items: center; bottom: 24px; display: flex; justify-content: space-between; left: 30px; position: fixed; right: 30px; z-index: 40; }
+    .control-group { display: flex; gap: 7px; }
+    .control-button { align-items: center; background: color-mix(in srgb, var(--ivory-soft) 86%, transparent); border: 1px solid color-mix(in srgb, var(--ink) 28%, transparent); color: var(--ink); cursor: pointer; display: flex; font-size: 1rem; height: 38px; justify-content: center; width: 38px; backdrop-filter: blur(10px); }
+    .control-button:disabled { cursor: default; opacity: .38; }
+    .progress { align-items: center; display: flex; gap: 12px; }
+    .progress-track { background: color-mix(in srgb, var(--ink) 22%, transparent); height: 1px; width: 160px; }
+    .progress-fill { background: var(--ink); display: block; height: 100%; transition: width 300ms ease; }
+    .progress-label { font-size: .6rem; letter-spacing: .14em; min-width: 47px; text-align: right; }
+    .fullscreen { margin-left: auto; }
+    .scene-analytics .control-button, .scene-analytics ~ .deck-controls .control-button { color: var(--ink); }
+
+    @media (max-width: 860px) {
+      .deck-header { padding: 18px 20px; }
+      .brand span { display: none; }
+      .scene { padding: 95px 20px 84px; }
+      .scene-cover .scene-inner, .scene-title-row, .workspace-grid, .operations-grid, .close-grid { grid-template-columns: 1fr; }
+      .cover-art { min-height: 330px; }
+      .cover-art::before { height: 320px; width: 230px; }
+      .cover-card { height: 270px; width: 210px; }
+      .cover-card p { font-size: 2.4rem; }
+      .scene-title-row { gap: 19px; margin-bottom: 29px; }
+      .journey-grid { grid-template-columns: repeat(2, 1fr); }
+      .journey-step { min-height: 210px; }
+      .journey-step:nth-child(2) { border-right: 0; }
+      .journey-step:nth-child(-n+4) { border-bottom: 1px solid var(--line); }
+      .journey-step .num { margin-bottom: 35px; }
+      .trace-tool { grid-template-columns: 1fr; }
+      .prop-card { min-height: 210px; }
+      .analytics-grid { grid-template-columns: 1fr; }
+      .analytics-stats { gap: 15px; grid-template-columns: 1fr; }
+      .analytics-stat:not(:last-child) { border-bottom: 1px solid #5e7275; border-right: 0; margin: 0; padding: 0 0 15px; }
+      .value-strip { grid-template-columns: repeat(2, 1fr); }
+      .value-item:nth-child(2) { border-right: 0; }
+      .value-item:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
+      .deck-controls { bottom: 18px; left: 20px; right: 20px; }
+      .progress-track { width: 90px; }
+    }
+    @media (max-width: 520px) {
+      .demo-flag { font-size: .52rem; padding: 8px 9px; }
+      .display { font-size: clamp(3rem, 17vw, 5rem); }
+      .journey-grid { grid-template-columns: 1fr; }
+      .journey-step { border-bottom: 1px solid var(--line); border-right: 0 !important; min-height: 175px; }
+      .journey-step:last-child { border-bottom: 0; }
+      .panel, .source-card, .publication-card { padding: 20px; }
+      .funnel-row { grid-template-columns: 76px 1fr 48px; }
+      .source-row { grid-template-columns: 72px 1fr; }
+      .close-grid { gap: 32px; }
+    }
+    @media print {
+      html, body { height: auto; overflow: visible; }
+      .deck-header, .deck-controls { display: none; }
+      .scene { display: flex !important; height: auto; min-height: 100vh; page-break-after: always; position: relative; }
+    }
+  </style>
+</head>
+<body>
+  <div class="deck">
+    <header class="deck-header">
+      <div class="brand"><strong>BALO INMOBILIARIA</strong><span>Bienes raíces · Propuesta para Orlando Barraza</span></div>
+      <div class="demo-flag">Prototipo conceptual</div>
+    </header>
+
+    <main>
+      <section class="scene scene-cover active" data-scene="0" aria-label="Portada">
+        <div class="scene-inner">
+          <div class="cover-copy">
+            <p class="eyebrow">Balo Inmobiliaria · una idea para conversar</p>
+            <h1 class="display">Del primer <em>post</em> al <span class="sage">cierre</span> con contexto.</h1>
+            <p class="lead">Balo Inmobiliaria une inventario, contenido, leads, visitas y comisiones para que el equipo crezca sin perder la historia de cada cliente ni de cada inmueble.</p>
+            <div class="cover-actions">
+              <button class="action primary" type="button" data-go="1">Ver la experiencia <span aria-hidden="true">→</span></button>
+              <button class="action" type="button" id="start-fullscreen">Modo presentación</button>
+            </div>
+          </div>
+          <div class="cover-art" aria-hidden="true">
+            <div class="cover-card"><small>BIENES RAÍCES</small><p>Todo<br>conecta.</p><span>Lima · gestión inmobiliaria</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="scene scene-journey" data-scene="1" aria-label="Recorrido completo">
+        <div class="scene-inner">
+          <header class="scene-title-row">
+            <div><p class="eyebrow">01 · Recorrido</p><h2 class="scene-title">Una venta empieza <em>antes</em> de la visita.</h2></div>
+            <p class="scene-description">El origen no se pierde cuando un interesado cambia de canal, de gestor o incluso de inmueble. Cada acción aporta evidencia al mismo recorrido comercial.</p>
+          </header>
+          <div class="journey-grid">
+            <article class="journey-step"><span class="num">01</span><h3>Capta</h3><p>Un agente registra el inmueble y la autorización del propietario.</p><span class="data">Propietario · documentos · exclusividad</span></article>
+            <article class="journey-step"><span class="num">02</span><h3>Publica</h3><p>Convierte la ficha en contenido y avisos para cada canal.</p><span class="data">Post · URL · precio · responsable</span></article>
+            <article class="journey-step"><span class="num">03</span><h3>Conversa</h3><p>El cliente escribe, usa un enlace o deja sus datos.</p><span class="data">Canal · campaña · consentimiento</span></article>
+            <article class="journey-step"><span class="num">04</span><h3>Visita</h3><p>Un gestor califica, agenda y recoge el resultado real.</p><span class="data">Asignación · SLA · asistencia</span></article>
+            <article class="journey-step"><span class="num">05</span><h3>Negocia</h3><p>Oferta, contraoferta, crédito y expediente avanzan visibles.</p><span class="data">Condiciones · hitos · evidencia</span></article>
+            <article class="journey-step"><span class="num">06</span><h3>Cierra</h3><p>La comisión reconoce a quienes captaron, atendieron y cerraron.</p><span class="data">Resultado · reparto · retorno</span></article>
+          </div>
+          <p class="journey-note">Una visualización no identifica a una persona; la trazabilidad individual comienza cuando existe un clic, un mensaje, un formulario o una identificación confirmada.</p>
+        </div>
+      </section>
+
+      <section class="scene scene-workspace" data-scene="2" aria-label="Trazabilidad del lead">
+        <div class="scene-inner">
+          <header class="scene-title-row">
+            <div><p class="eyebrow">02 · Trazabilidad</p><h2 class="scene-title">Todo cliente llega con <em>historia.</em></h2></div>
+            <p class="scene-description">El equipo ve quién captó el inmueble, qué publicación atrajo al lead y quién debe dar el siguiente paso. Sin búsquedas en chats ni hojas dispersas.</p>
+          </header>
+          <div class="workspace-grid">
+            <article class="panel elevated">
+              <span class="panel-label">Lead ficticio · ficha resumida</span>
+              <div class="person-head"><span class="avatar" aria-hidden="true">CM</span><div><strong>Carolina M.</strong><small>Compra · Surco · origen TikTok verificado</small></div></div>
+              <div class="timeline">
+                <div class="timeline-row"><span class="timeline-dot"></span><div><strong>Contenido de origen</strong><span>Tour “3 dormitorios en Chacarilla” · TT-024</span></div><time>12 JUL</time></div>
+                <div class="timeline-row"><span class="timeline-dot"></span><div><strong>Lead asignado</strong><span>Gestora Karina · respuesta en 3 min 42 s</span></div><time>12 JUL</time></div>
+                <div class="timeline-row"><span class="timeline-dot"></span><div><strong>Visita realizada</strong><span>Interés confirmado · solicita alternativa con balcón</span></div><time>15 JUL</time></div>
+                <div class="timeline-row"><span class="timeline-dot"></span><div><strong>Próxima acción</strong><span>Enviar 2 inmuebles equivalentes antes de las 18:00</span></div><time>HOY</time></div>
+              </div>
+              <div class="status-line"><span>Consentimiento comercial registrado</span><span class="status-pill">Auditable</span></div>
+            </article>
+            <article class="panel">
+              <span class="panel-label">Inmueble y roles conectados</span>
+              <div class="trace-tool">
+                <div class="prop-card"><span class="prop-code">PROP-451 · Disponible</span><h3>Chacarilla,<br>Surco</h3><p>Departamento · 132 m² · 3 dormitorios<br>Precio publicado: US$ 285.000</p><p>El mismo inmueble puede tener varias publicaciones; cada una conserva su URL, campaña y responsable.</p></div>
+                <div>
+                  <div class="agent-roles">
+                    <button class="role-row active" type="button" data-role="captor"><span class="role-dot"></span><span>Ana · captadora</span><small>Propietario</small></button>
+                    <button class="role-row" type="button" data-role="publisher"><span class="role-dot"></span><span>Luis · publicador</span><small>TT-024</small></button>
+                    <button class="role-row" type="button" data-role="manager"><span class="role-dot"></span><span>Karina · gestora</span><small>Lead</small></button>
+                    <button class="role-row" type="button" data-role="visitor"><span class="role-dot"></span><span>Diego · visitador</span><small>Visita</small></button>
+                  </div>
+                  <div class="role-summary" aria-live="polite"><strong id="role-title">Ana · captación</strong><p id="role-copy">Registra la autorización, los documentos y la relación con el propietario. Su contribución permanece visible hasta el cierre.</p></div>
+                  <div class="status-line"><span>Reglas de comisión v.2</span><span class="status-pill">Aprobación supervisada</span></div>
+                </div>
+              </div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="scene scene-analytics" data-scene="3" aria-label="Analítica de contenidos">
+        <div class="scene-inner">
+          <header class="scene-title-row">
+            <div><p class="eyebrow">03 · Crecimiento</p><h2 class="scene-title">Vistas están bien. <em>Visitas</em> están mejor.</h2></div>
+            <p class="scene-description">No buscamos el post más visto: buscamos el contenido que genera leads calificados, visitas realizadas, ofertas y una comisión sostenible.</p>
+          </header>
+          <div class="analytics-grid">
+            <div class="content-tabs" role="tablist" aria-label="Contenido de ejemplo">
+              <button class="content-tab active" type="button" data-content="tour" aria-selected="true"><span>Tour de inmueble</span><span>Demanda</span></button>
+              <button class="content-tab" type="button" data-content="guide" aria-selected="false"><span>Guía de compra</span><span>Confianza</span></button>
+              <button class="content-tab" type="button" data-content="area" aria-selected="false"><span>Vivir el distrito</span><span>Alcance</span></button>
+            </div>
+            <div class="analytics-panel">
+              <span class="sample-label">Datos de ejemplo · no son resultados reales</span>
+              <div class="analytics-head"><h3 id="content-title">Tour de inmueble</h3><p id="content-subtitle">“Chacarilla: 132 m² en 45 segundos”</p></div>
+              <div class="funnel">
+                <div class="funnel-row"><label>Vistas</label><div class="funnel-track"><span class="funnel-fill" id="bar-views"></span></div><output id="metric-views">18.400</output></div>
+                <div class="funnel-row"><label>Mensajes</label><div class="funnel-track"><span class="funnel-fill" id="bar-messages"></span></div><output id="metric-messages">214</output></div>
+                <div class="funnel-row"><label>Calificados</label><div class="funnel-track"><span class="funnel-fill" id="bar-qualified"></span></div><output id="metric-qualified">88</output></div>
+                <div class="funnel-row"><label>Visitas</label><div class="funnel-track"><span class="funnel-fill" id="bar-visits"></span></div><output id="metric-visits">41</output></div>
+                <div class="funnel-row"><label>Ofertas</label><div class="funnel-track"><span class="funnel-fill" id="bar-offers"></span></div><output id="metric-offers">7</output></div>
+              </div>
+              <div class="analytics-stats">
+                <div class="analytics-stat"><span>Mensaje → calificado</span><strong id="rate-qualified">41%</strong></div>
+                <div class="analytics-stat"><span>Calificado → visita</span><strong id="rate-visit">47%</strong></div>
+                <div class="analytics-stat"><span>Visita → oferta</span><strong id="rate-offer">17%</strong></div>
+              </div>
+              <div class="analytics-insight" id="content-insight">No es el contenido con más alcance, pero atrae personas que muestran mejor encaje de zona, presupuesto y plazo.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="scene scene-operations" data-scene="4" aria-label="Operación de publicación">
+        <div class="scene-inner">
+          <header class="scene-title-row">
+            <div><p class="eyebrow">04 · Operación</p><h2 class="scene-title">Cada publicación mantiene el inventario <em>al día.</em></h2></div>
+            <p class="scene-description">El equipo parte de una ficha única y publica con contexto. No hay inmuebles activos con un precio, foto o disponibilidad distinta en cada canal.</p>
+          </header>
+          <div class="operations-grid">
+            <article class="source-card">
+              <span class="panel-label">Ficha lista para aprobar</span>
+              <h3>PROP-451</h3>
+              <div class="source-box">
+                <div class="source-row"><span>Agente</span><strong>Ana Morales · captación</strong></div>
+                <div class="source-row"><span>Propietario</span><strong>Autorización vigente · exclusiva</strong></div>
+                <div class="source-row"><span>Precio</span><strong>US$ 285.000 · versión 2 aprobada</strong></div>
+                <div class="source-row"><span>Media</span><strong>28 fotos · video vertical · tour</strong></div>
+              </div>
+              <p class="operation-note">Si una condición cambia, el sistema crea una nueva versión y alerta a los agentes antes de que un aviso desactualizado siga recibiendo leads.</p>
+            </article>
+            <article class="publication-card">
+              <span class="panel-label">Distribución y estado</span>
+              <h3>Publicaciones activas</h3>
+              <table class="publish-table"><thead><tr><th>Canal</th><th>Responsable</th><th>Estado</th></tr></thead><tbody>
+                <tr><td>TikTok · TT-024</td><td>Luis</td><td><span class="channel-status">Publicado</span></td></tr>
+                <tr><td>Instagram · RE-087</td><td>Luis</td><td><span class="channel-status">Publicado</span></td></tr>
+                <tr><td>Urbania · UP-451</td><td>Ana</td><td><span class="channel-status">Publicado</span></td></tr>
+                <tr><td>Adondevivir · AD-451</td><td>Ana</td><td><span class="channel-status waiting">Revisión</span></td></tr>
+              </tbody></table>
+              <button class="validate-button" id="validate-publication" type="button">Validar sincronización</button>
+              <p class="operation-note" id="publication-note" aria-live="polite">La distribución automática propone; el equipo aprueba antes de publicar.</p>
+            </article>
+          </div>
+          <div class="value-strip"><div class="value-item"><span>01</span><strong>Una ficha fuente de verdad</strong></div><div class="value-item"><span>02</span><strong>Versiones de precio y media</strong></div><div class="value-item"><span>03</span><strong>Alertas de publicación vencida</strong></div><div class="value-item"><span>04</span><strong>Origen visible en cada lead</strong></div></div>
+        </div>
+      </section>
+
+      <section class="scene scene-close" data-scene="5" aria-label="Propuesta de piloto">
+        <div class="scene-inner close-grid">
+          <div><p class="eyebrow">05 · Siguiente paso</p><h2 class="close-title">Orlando, probemos si <em>esta es la forma correcta de escalar.</em></h2></div>
+          <div class="pilot">
+            <p>No se trata de sumar otro CRM. Se trata de dar al equipo la misma historia del inmueble y convertir el marketing en decisiones comerciales.</p>
+            <div class="pilot-row"><span>01</span><strong>Un recorrido completo: inmueble → contenido → cierre</strong></div>
+            <div class="pilot-row"><span>02</span><strong>Un equipo inicial de 5–10 gestores con roles claros</strong></div>
+            <div class="pilot-row"><span>03</span><strong>Tres canales para validar trazabilidad y analítica</strong></div>
+            <div class="pilot-row"><span>04</span><strong>Una revisión conjunta antes de construir el MVP</strong></div>
+            <div class="close-actions"><button class="action primary" type="button" data-go="0">Volver al inicio</button><button class="action" type="button" onclick="window.print()">Guardar como PDF</button></div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <nav class="deck-controls" aria-label="Controles de presentación">
+      <div class="control-group"><button class="control-button" id="prev" type="button" aria-label="Escena anterior">←</button><button class="control-button" id="next" type="button" aria-label="Escena siguiente">→</button></div>
+      <div class="progress" aria-label="Progreso"><div class="progress-track"><span class="progress-fill" id="progress-fill"></span></div><span class="progress-label" id="progress-label">01 / 06</span></div>
+      <button class="control-button fullscreen" id="fullscreen" type="button" aria-label="Activar pantalla completa">⛶</button>
+    </nav>
+  </div>
+  <script>
+    (function () {
+      const scenes = Array.from(document.querySelectorAll('.scene'));
+      const prevButton = document.getElementById('prev');
+      const nextButton = document.getElementById('next');
+      const progressFill = document.getElementById('progress-fill');
+      const progressLabel = document.getElementById('progress-label');
+      let current = 0;
+      let changing = false;
+      const pad = number => String(number).padStart(2, '0');
+      function showScene(index) {
+        if (changing || index === current || index < 0 || index >= scenes.length) return;
+        changing = true;
+        const oldScene = scenes[current];
+        oldScene.classList.add('leaving');
+        setTimeout(() => {
+          oldScene.classList.remove('active', 'leaving');
+          current = index;
+          scenes[current].classList.add('active');
+          scenes[current].scrollTop = 0;
+          updateControls();
+          setTimeout(() => { changing = false; }, 640);
+        }, 250);
+      }
+      function updateControls() {
+        prevButton.disabled = current === 0;
+        nextButton.disabled = current === scenes.length - 1;
+        progressFill.style.width = ((current + 1) / scenes.length * 100) + '%';
+        progressLabel.textContent = pad(current + 1) + ' / ' + pad(scenes.length);
+      }
+      prevButton.addEventListener('click', () => showScene(current - 1));
+      nextButton.addEventListener('click', () => showScene(current + 1));
+      document.querySelectorAll('[data-go]').forEach(button => button.addEventListener('click', () => showScene(Number(button.dataset.go))));
+      document.addEventListener('keydown', event => {
+        if (event.key === 'ArrowRight' || event.key === 'PageDown') showScene(current + 1);
+        if (event.key === 'ArrowLeft' || event.key === 'PageUp') showScene(current - 1);
+        if (event.key === 'Home') showScene(0);
+        if (event.key === 'End') showScene(scenes.length - 1);
+      });
+      let touchStartX = 0;
+      document.addEventListener('touchstart', event => { touchStartX = event.changedTouches[0].screenX; }, { passive: true });
+      document.addEventListener('touchend', event => { const distance = event.changedTouches[0].screenX - touchStartX; if (Math.abs(distance) >= 65) showScene(distance < 0 ? current + 1 : current - 1); }, { passive: true });
+      async function toggleFullscreen() { try { if (!document.fullscreenElement) await document.documentElement.requestFullscreen(); else await document.exitFullscreen(); } catch (error) {} }
+      document.getElementById('fullscreen').addEventListener('click', toggleFullscreen);
+      document.getElementById('start-fullscreen').addEventListener('click', toggleFullscreen);
+      const roleData = {
+        captor: ['Ana · captación', 'Registra la autorización, los documentos y la relación con el propietario. Su contribución permanece visible hasta el cierre.'],
+        publisher: ['Luis · publicación', 'Convierte la ficha aprobada en contenido y avisos. Cada URL, campaña y cambio de precio queda asociado a su publicación.'],
+        manager: ['Karina · gestión del lead', 'Responde, califica la necesidad y conserva las conversaciones, tareas y próximos pasos del cliente.'],
+        visitor: ['Diego · visita', 'Registra asistencia, feedback y objeciones. Su evidencia conecta la visita con la oportunidad comercial.']
+      };
+      document.querySelectorAll('[data-role]').forEach(button => button.addEventListener('click', () => {
+        const key = button.dataset.role;
+        document.querySelectorAll('[data-role]').forEach(peer => peer.classList.toggle('active', peer.dataset.role === key));
+        document.getElementById('role-title').textContent = roleData[key][0];
+        document.getElementById('role-copy').textContent = roleData[key][1];
+      }));
+      const contentData = {
+        tour: { title: 'Tour de inmueble', subtitle: '“Chacarilla: 132 m² en 45 segundos”', views: 18400, messages: 214, qualified: 88, visits: 41, offers: 7, insight: 'No es el contenido con más alcance, pero atrae personas que muestran mejor encaje de zona, presupuesto y plazo.' },
+        guide: { title: 'Guía de compra', subtitle: '“Qué revisar antes de separar un departamento”', views: 12600, messages: 188, qualified: 97, visits: 46, offers: 9, insight: 'Resuelve una objeción concreta y consigue la mejor conversión hacia una visita y una oferta real.' },
+        area: { title: 'Vivir el distrito', subtitle: '“Un sábado en Barranco, a pasos del malecón”', views: 31400, messages: 171, qualified: 54, visits: 20, offers: 3, insight: 'Es la pieza de mayor alcance: funciona como construcción de marca y debe medirse distinto a un anuncio de captación directa.' }
+      };
+      const metrics = ['views', 'messages', 'qualified', 'visits', 'offers'];
+      const formatter = new Intl.NumberFormat('es-PE');
+      function updateContent(key) {
+        const item = contentData[key];
+        document.querySelectorAll('[data-content]').forEach(button => { const active = button.dataset.content === key; button.classList.toggle('active', active); button.setAttribute('aria-selected', String(active)); });
+        document.getElementById('content-title').textContent = item.title;
+        document.getElementById('content-subtitle').textContent = item.subtitle;
+        document.getElementById('content-insight').textContent = item.insight;
+        metrics.forEach(metric => { const width = metric === 'views' ? 100 : Math.max(7, Math.sqrt(item[metric] / item.views) * 100); document.getElementById('bar-' + metric).style.width = width + '%'; document.getElementById('metric-' + metric).textContent = formatter.format(item[metric]); });
+        document.getElementById('rate-qualified').textContent = Math.round(item.qualified / item.messages * 100) + '%';
+        document.getElementById('rate-visit').textContent = Math.round(item.visits / item.qualified * 100) + '%';
+        document.getElementById('rate-offer').textContent = Math.round(item.offers / item.visits * 100) + '%';
+      }
+      document.querySelectorAll('[data-content]').forEach(button => button.addEventListener('click', () => updateContent(button.dataset.content)));
+      const publishButton = document.getElementById('validate-publication');
+      publishButton.addEventListener('click', () => { publishButton.classList.add('done'); publishButton.textContent = 'Sincronización validada'; publishButton.disabled = true; document.getElementById('publication-note').textContent = 'Estado actualizado con fecha, versiones, canales y responsable. El histórico queda disponible para auditoría.'; });
+      updateContent('tour');
+      updateControls();
+    }());
+  </script>
+</body>
+</html>
