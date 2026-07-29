@@ -237,6 +237,17 @@
       .source-row { grid-template-columns: 72px 1fr; }
       .close-grid { gap: 32px; }
     }
+    @media (max-height: 760px) and (min-width: 861px) {
+      .deck-header { padding: 15px 30px; }
+      .scene { padding-bottom: 70px; padding-top: 72px; }
+      .scene-cover .scene-inner { gap: 34px; }
+      .cover-art { min-height: 390px; }
+      .cover-art::before { height: 390px; width: 272px; }
+      .cover-card { height: 330px; width: 250px; }
+      .cover-card p { font-size: 3rem; }
+      .cover-actions { margin-top: 25px; }
+      .deck-controls { bottom: 12px; }
+    }
     @media print {
       html, body { height: auto; overflow: visible; }
       .deck-header, .deck-controls { display: none; }
