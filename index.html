@@ -3,10 +3,180 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="refresh" content="0; url=outputs/prototipo_orlando_barraza_balo_inmobiliaria.html">
-  <title>Balo Inmobiliaria · Propuesta para Orlando Barraza</title>
+  <meta name="description" content="Balo Inmobiliaria: bienes raíces en Lima con servicio cercano, estrategia y cada paso visible.">
+  <title>Balo Inmobiliaria · Bienes Raíces en Lima</title>
+  <link rel="icon" href="data:,">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Public+Sans:wght@400;500;600;700&display=swap');
+    :root {
+      --petrol-950:#071e22; --petrol-900:#0c2b30; --petrol-800:#123a41; --petrol-700:#1a4d55; --petrol-600:#24626b; --petrol-400:#5b96a0; --petrol-100:#e6f1f2;
+      --jade-700:#1f6b52; --jade-600:#26855f; --jade-100:#e3f6ec;
+      --terracotta-700:#9c4a30; --terracotta-600:#b85c3d; --terracotta-500:#c97748; --sand-400:#d9a066; --sand-100:#faf0e3;
+      --amber-600:#b8790a; --amber-100:#fbf0da;
+      --warm-white:#faf8f4; --paper:#f3f0ea; --sand-50:#eeeae1;
+      --neutral-900:#1c1b19; --neutral-700:#453f38; --neutral-600:#655d52; --neutral-500:#8a8175; --neutral-300:#cec8bd; --neutral-200:#e4e0d8; --neutral-0:#fff;
+      --font-display:'Plus Jakarta Sans',system-ui,sans-serif; --font-body:'Public Sans',system-ui,sans-serif;
+      --radius-lg:24px; --radius-md:16px; --radius-sm:10px; --shadow:0 22px 70px rgba(7,30,34,.12); --max:1180px;
+    }
+    * { box-sizing:border-box; }
+    html { scroll-behavior:smooth; }
+    body { background:var(--warm-white); color:var(--neutral-900); font-family:var(--font-body); margin:0; }
+    a { color:inherit; text-decoration:none; }
+    button,input,select { font:inherit; }
+    button { cursor:pointer; }
+    .shell { margin:0 auto; max-width:var(--max); padding:0 28px; }
+    .announcement { background:var(--petrol-900); color:#fff; font-size:.78rem; letter-spacing:.015em; padding:10px 0; text-align:center; }
+    .announcement strong { color:#f0c18b; }
+    body > header { background:rgba(250,248,244,.91); border-bottom:1px solid rgba(206,200,189,.76); position:sticky; top:0; z-index:20; backdrop-filter:blur(14px); }
+    .nav { align-items:center; display:flex; gap:28px; justify-content:space-between; min-height:82px; }
+    .brand { align-items:center; display:flex; gap:9px; min-width:218px; }
+    .brand img { display:block; height:41px; width:140px; }
+    .brand span { border-left:1px solid var(--neutral-300); color:var(--neutral-600); font-size:.62rem; letter-spacing:.1em; padding-left:9px; text-transform:uppercase; }
+    .nav-links { align-items:center; display:flex; gap:23px; }
+    .nav-links a { color:var(--neutral-700); font-size:.84rem; font-weight:600; }
+    .nav-links a:hover { color:var(--terracotta-600); }
+    .menu-toggle { background:transparent; border:1px solid var(--neutral-300); border-radius:10px; color:var(--petrol-800); display:none; height:42px; width:42px; }
+    .button { align-items:center; border:1px solid transparent; border-radius:10px; display:inline-flex; font-size:.84rem; font-weight:700; gap:8px; justify-content:center; min-height:48px; padding:0 18px; transition:transform .16s ease, background .16s ease; }
+    .button:hover { transform:translateY(-2px); }
+    .button.primary { background:var(--petrol-800); color:#fff; }
+    .button.primary:hover { background:var(--petrol-700); }
+    .button.accent { background:var(--terracotta-600); color:#fff; }
+    .button.ghost { border-color:var(--neutral-300); color:var(--petrol-800); }
+    .eyebrow { align-items:center; color:var(--terracotta-600); display:flex; font-size:.72rem; font-weight:800; gap:10px; letter-spacing:.13em; margin:0 0 15px; text-transform:uppercase; }
+    .eyebrow::before { background:currentColor; content:""; height:2px; width:25px; }
+    h1,h2,h3 { font-family:var(--font-display); }
+    .hero { overflow:hidden; padding:86px 0 94px; position:relative; }
+    .hero::before { background:radial-gradient(circle at 72% 45%,rgba(217,160,102,.22),transparent 25%),radial-gradient(circle at 80% 10%,rgba(91,150,160,.18),transparent 24%); content:""; inset:0; pointer-events:none; position:absolute; }
+    .hero-grid { align-items:center; display:grid; gap:58px; grid-template-columns:1.02fr .98fr; position:relative; }
+    h1 { color:var(--petrol-900); font-size:clamp(3rem,5.4vw,5.85rem); letter-spacing:-.072em; line-height:.98; margin:0; max-width:680px; }
+    h1 em { color:var(--terracotta-600); font-style:normal; }
+    .hero-copy > p:not(.eyebrow) { color:var(--neutral-700); font-size:1.08rem; line-height:1.7; margin:25px 0 31px; max-width:600px; }
+    .hero-actions { display:flex; flex-wrap:wrap; gap:12px; }
+    .trust-line { align-items:center; color:var(--neutral-600); display:flex; font-size:.77rem; gap:9px; margin-top:28px; }
+    .trust-line::before { background:var(--jade-600); border-radius:50%; content:""; height:9px; width:9px; }
+    .hero-visual { min-height:510px; position:relative; }
+    .hero-photo { background:#173c44 url('public/og.png') right center / cover no-repeat; border-radius:100px 18px 18px 18px; box-shadow:var(--shadow); height:462px; overflow:hidden; position:absolute; right:0; top:18px; width:77%; }
+    .hero-photo::after { background:linear-gradient(180deg,rgba(7,30,34,0),rgba(7,30,34,.46)); content:""; inset:0; position:absolute; }
+    .photo-label { bottom:25px; color:#fff; font-size:.73rem; font-weight:700; left:25px; letter-spacing:.08em; position:absolute; text-transform:uppercase; z-index:1; }
+    .valuation-card { background:#fff; border:2px solid var(--neutral-200); border-radius:var(--radius-md); bottom:0; box-shadow:var(--shadow); left:0; padding:20px; position:absolute; width:258px; z-index:2; }
+    .valuation-card small { color:var(--neutral-600); display:block; font-size:.64rem; font-weight:800; letter-spacing:.11em; margin-bottom:8px; text-transform:uppercase; }
+    .valuation-card strong { color:var(--petrol-800); display:block; font:800 1.45rem/1.2 var(--font-display); }
+    .valuation-card p { color:var(--neutral-600); font-size:.76rem; line-height:1.5; margin:8px 0 0; }
+    .valuation-card .tag { background:var(--jade-100); border-radius:999px; color:var(--jade-700); display:inline-block; font-size:.62rem; font-weight:800; margin-top:12px; padding:6px 9px; }
+    .band { background:var(--petrol-900); color:#fff; }
+    .proof { display:grid; grid-template-columns:1.1fr repeat(3,1fr); }
+    .proof > div { border-right:1px solid rgba(230,241,242,.18); padding:28px 25px; }
+    .proof > div:first-child { padding-left:0; }
+    .proof > div:last-child { border-right:0; }
+    .proof span { color:#b8d8dc; display:block; font-size:.68rem; font-weight:700; letter-spacing:.1em; margin-bottom:7px; text-transform:uppercase; }
+    .proof strong { font:700 1rem/1.3 var(--font-display); }
+    section { padding:95px 0; }
+    .section-head { display:grid; gap:30px; grid-template-columns:.94fr .7fr; margin-bottom:44px; }
+    .section-head h2 { color:var(--petrol-900); font-size:clamp(2.15rem,4vw,3.8rem); letter-spacing:-.055em; line-height:1.04; margin:0; }
+    .section-head > p { align-self:end; color:var(--neutral-700); font-size:1rem; line-height:1.68; margin:0; }
+    .cards-3 { display:grid; gap:17px; grid-template-columns:repeat(3,1fr); }
+    .value-card { background:var(--neutral-0); border:2px solid var(--neutral-200); border-radius:var(--radius-md); min-height:245px; padding:25px; transition:transform .2s ease,box-shadow .2s ease; }
+    .value-card:hover { box-shadow:var(--shadow); transform:translateY(-4px); }
+    .number { color:var(--terracotta-600); font:700 .75rem var(--font-display); letter-spacing:.08em; }
+    .value-card h3 { color:var(--petrol-900); font-size:1.31rem; letter-spacing:-.025em; margin:44px 0 10px; }
+    .value-card p { color:var(--neutral-600); font-size:.88rem; line-height:1.58; margin:0; }
+    .quiet { background:var(--paper); }
+    .split { align-items:center; display:grid; gap:62px; grid-template-columns:.85fr 1.15fr; }
+    .split-copy h2 { color:var(--petrol-900); font-size:clamp(2.1rem,3.7vw,3.55rem); letter-spacing:-.06em; line-height:1.07; margin:0 0 18px; }
+    .split-copy > p { color:var(--neutral-700); line-height:1.7; margin:0 0 25px; }
+    .steps { border-top:2px solid var(--neutral-300); }
+    .step { align-items:start; border-bottom:2px solid var(--neutral-300); display:grid; gap:17px; grid-template-columns:40px 1fr auto; padding:19px 0; }
+    .step span { color:var(--terracotta-600); font:800 .78rem var(--font-display); padding-top:3px; }
+    .step h3 { color:var(--petrol-900); font-size:1rem; margin:0 0 5px; }
+    .step p { color:var(--neutral-600); font-size:.82rem; line-height:1.45; margin:0; }
+    .step em { color:var(--jade-700); font-size:.72rem; font-style:normal; font-weight:800; padding-top:3px; }
+    .differentiation { background:var(--petrol-900); color:#fff; }
+    .differentiation .section-head h2 { color:#fff; }
+    .differentiation .section-head > p { color:#c7dee1; }
+    .difference-table { border:1px solid rgba(230,241,242,.3); border-radius:var(--radius-md); overflow:hidden; }
+    .difference-row { display:grid; grid-template-columns:.72fr 1fr 1fr; }
+    .difference-row > * { border-right:1px solid rgba(230,241,242,.22); padding:18px 20px; }
+    .difference-row > *:last-child { border-right:0; }
+    .difference-row:not(:last-child) > * { border-bottom:1px solid rgba(230,241,242,.22); }
+    .difference-row:first-child { background:rgba(230,241,242,.08); }
+    .difference-row span { color:#c7dee1; font-size:.74rem; font-weight:700; }
+    .difference-row strong { color:#fff; font-size:.78rem; letter-spacing:.06em; text-transform:uppercase; }
+    .difference-row p { color:#c7dee1; font-size:.84rem; line-height:1.5; margin:0; }
+    .difference-row .balo { background:rgba(47,158,115,.14); color:#fff; }
+    .difference-note { color:#c7dee1; font-size:.75rem; line-height:1.55; margin:18px 0 0; }
+    .difference-note a { color:#e6bd8d; text-decoration:underline; }
+    .owner-panel { background:#fff; border:2px solid var(--neutral-200); border-radius:var(--radius-lg); box-shadow:var(--shadow); display:grid; grid-template-columns:.96fr 1.04fr; overflow:hidden; }
+    .owner-copy { padding:42px; }
+    .owner-copy h2 { color:var(--petrol-900); font-size:2.32rem; letter-spacing:-.055em; line-height:1.04; margin:0 0 15px; }
+    .owner-copy p { color:var(--neutral-700); line-height:1.67; margin:0 0 21px; }
+    .owner-ui { background:var(--paper); border-left:2px solid var(--neutral-200); padding:28px; }
+    .ui-head { align-items:center; display:flex; justify-content:space-between; margin-bottom:20px; }
+    .ui-head strong { color:var(--petrol-900); font:700 .92rem var(--font-display); }
+    .ui-head span { background:var(--jade-100); border-radius:999px; color:var(--jade-700); font-size:.62rem; font-weight:800; padding:6px 9px; }
+    .ui-kpis { display:grid; gap:10px; grid-template-columns:repeat(3,1fr); }
+    .ui-kpis div { background:#fff; border:2px solid var(--neutral-200); border-radius:10px; padding:13px; }
+    .ui-kpis small { color:var(--neutral-600); display:block; font-size:.6rem; font-weight:700; letter-spacing:.06em; text-transform:uppercase; }
+    .ui-kpis strong { color:var(--petrol-900); display:block; font:800 1.35rem var(--font-display); margin-top:7px; }
+    .mini-timeline { background:#fff; border:2px solid var(--neutral-200); border-radius:10px; margin-top:10px; padding:15px; }
+    .mini-timeline p { align-items:center; border-bottom:1px solid var(--neutral-200); color:var(--neutral-700); display:flex; font-size:.72rem; gap:10px; margin:0; padding:10px 0; }
+    .mini-timeline p:last-child { border-bottom:0; }
+    .mini-timeline i { background:var(--terracotta-600); border-radius:50%; display:inline-block; height:7px; width:7px; }
+    .mini-timeline time { color:var(--neutral-500); font-size:.61rem; margin-left:auto; }
+    .contact { background:var(--sand-100); }
+    .contact-grid { align-items:start; display:grid; gap:65px; grid-template-columns:.92fr 1.08fr; }
+    .contact-copy h2 { color:var(--petrol-900); font-size:clamp(2.3rem,4.5vw,4.2rem); letter-spacing:-.065em; line-height:1; margin:0 0 20px; }
+    .contact-copy p { color:var(--neutral-700); line-height:1.7; margin:0; }
+    .contact-points { display:grid; gap:10px; margin-top:27px; }
+    .contact-points div { align-items:center; display:flex; font-size:.84rem; font-weight:700; gap:10px; }
+    .contact-points i { background:var(--jade-600); border-radius:50%; display:inline-block; height:9px; width:9px; }
+    form { background:#fff; border:2px solid var(--neutral-200); border-radius:var(--radius-md); box-shadow:var(--shadow); display:grid; gap:14px; padding:26px; }
+    form h3 { color:var(--petrol-900); font-size:1.25rem; margin:0 0 2px; }
+    label { color:var(--neutral-700); font-size:.76rem; font-weight:800; }
+    input,select { background:#fff; border:2px solid var(--neutral-300); border-radius:10px; color:var(--neutral-900); min-height:48px; outline:none; padding:0 12px; width:100%; }
+    input:focus,select:focus { border-color:var(--petrol-600); box-shadow:0 0 0 3px rgba(91,150,160,.22); }
+    .form-grid { display:grid; gap:13px; grid-template-columns:1fr 1fr; }
+    .form-message { color:var(--jade-700); display:none; font-size:.79rem; font-weight:700; line-height:1.5; margin:0; }
+    .form-message.visible { display:block; }
+    footer { background:var(--petrol-950); color:#c7dee1; padding:38px 0; }
+    .footer { align-items:center; display:flex; gap:24px; justify-content:space-between; }
+    .footer-brand { align-items:center; display:flex; gap:10px; }
+    .footer-brand img { filter:brightness(0) invert(1); height:35px; width:108px; }
+    .footer-brand span { border-left:1px solid rgba(199,222,225,.35); font-size:.58rem; letter-spacing:.1em; padding-left:9px; text-transform:uppercase; }
+    .footer small { font-size:.68rem; line-height:1.5; max-width:490px; text-align:right; }
+    @media (max-width:860px) {
+      .shell { padding:0 20px; }.nav { min-height:73px; }.nav-links { background:var(--warm-white); border-bottom:1px solid var(--neutral-200); display:none; left:0; padding:15px 20px 22px; position:absolute; right:0; top:73px; }.nav-links.open { display:grid; gap:16px; }.menu-toggle { display:block; }.nav .button { display:none; }
+      .hero { padding:62px 0 70px; }.hero-grid,.section-head,.split,.contact-grid { grid-template-columns:1fr; }.hero-grid { gap:35px; }.hero-visual { min-height:410px; }.hero-photo { height:350px; width:84%; }.valuation-card { width:238px; }.proof { grid-template-columns:1fr 1fr; }.proof > div:first-child { grid-column:1/-1; padding-left:0; }.proof > div:nth-child(3) { border-right:0; }
+      .section-head { gap:18px; margin-bottom:31px; }.cards-3 { grid-template-columns:1fr; }.difference-row { grid-template-columns:.72fr 1fr; }.difference-row > :nth-child(2) { display:none; }.owner-panel { grid-template-columns:1fr; }.owner-ui { border-left:0; border-top:2px solid var(--neutral-200); }.contact-grid { gap:35px; } section { padding:72px 0; }
+    }
+    @media (max-width:520px) { .brand span { display:none; }.hero-photo { border-radius:66px 14px 14px 14px; }.proof { grid-template-columns:1fr; }.proof > div { border-bottom:1px solid rgba(230,241,242,.18); border-right:0; padding-left:0; }.proof > div:last-child { border-bottom:0; }.form-grid,.ui-kpis { grid-template-columns:1fr; }.footer { align-items:start; flex-direction:column; }.footer small { text-align:left; }.difference-row { grid-template-columns:1fr; }.difference-row > :nth-child(1) { border-bottom:1px solid rgba(230,241,242,.22); }.difference-row > :nth-child(2) { display:none; } }
+  </style>
 </head>
 <body>
-  <p>Abriendo la presentación de <a href="outputs/prototipo_orlando_barraza_balo_inmobiliaria.html">Balo Inmobiliaria</a>…</p>
+  <div class="announcement">Balo Inmobiliaria · <strong>cercanía humana</strong> para tomar decisiones inmobiliarias con confianza.</div>
+  <header><div class="shell nav">
+    <a class="brand" href="#inicio" aria-label="Balo Inmobiliaria, inicio"><img src="public/balo-logo.svg" alt="Balo"><span>Inmobiliaria<br>bienes raíces</span></a>
+    <button class="menu-toggle" id="menu-toggle" aria-label="Abrir navegación" aria-expanded="false">☰</button>
+    <nav class="nav-links" id="nav-links" aria-label="Navegación principal"><a href="#vender">Vender</a><a href="#comprar">Comprar</a><a href="#como-trabajamos">Cómo trabajamos</a><a href="outputs/prototipo_orlando_barraza_balo_inmobiliaria.html">Propuesta</a></nav>
+    <a class="button primary" href="#contacto">Conversemos <span aria-hidden="true">→</span></a>
+  </div></header>
+  <main>
+    <section class="hero" id="inicio"><div class="shell hero-grid">
+      <div class="hero-copy"><p class="eyebrow">Bienes raíces en Lima</p><h1>Tu próxima historia empieza con alguien que <em>sí te acompaña.</em></h1><p>En Balo combinamos una asesoría cercana con información clara y una estrategia de comercialización hecha para tu propiedad. Sin decisiones a ciegas. Sin perderte en el proceso.</p><div class="hero-actions"><a class="button accent" href="#contacto">Quiero vender mi propiedad <span aria-hidden="true">→</span></a><a class="button ghost" href="#como-trabajamos">Conocer nuestro método</a></div><div class="trust-line">Un asesor responsable de tu historia, respaldado por un equipo que responde.</div></div>
+      <div class="hero-visual" aria-label="Vista editorial de una propiedad en Lima"><div class="hero-photo"><span class="photo-label">Lima · Bienes raíces con propósito</span></div><div class="valuation-card"><small>Para propietarios</small><strong>Decisiones con contexto</strong><p>Precio, publicación, visitas y próximos pasos explicados de forma simple.</p><span class="tag">Seguimiento visible</span></div></div>
+    </div></section>
+    <div class="band"><div class="shell proof"><div><span>La promesa Balo</span><strong>Una relación cercana, no una transacción impersonal.</strong></div><div><span>Conocimiento</span><strong>Entendemos el inmueble antes de hablar de publicarlo.</strong></div><div><span>Estrategia</span><strong>Conectamos contenido, portales y demanda real.</strong></div><div><span>Claridad</span><strong>Siempre sabes qué hicimos y qué sigue.</strong></div></div></div>
+    <section id="vender"><div class="shell"><header class="section-head"><div><p class="eyebrow">Vender con Balo</p><h2>No es solo publicar una propiedad. Es representarla bien.</h2></div><p>El mercado ofrece visibilidad y asesoría. Nuestra diferencia es que cada recomendación, conversación y acción se convierte en un plan claro para el propietario y en una experiencia coherente para el comprador.</p></header><div class="cards-3"><article class="value-card"><span class="number">01 / Cercanía</span><h3>Un asesor que te conoce</h3><p>Empezamos por escuchar tus prioridades, el momento de la venta y lo que hace única a tu propiedad. No eres un aviso más.</p></article><article class="value-card"><span class="number">02 / Estrategia</span><h3>Visibilidad con intención</h3><p>Definimos cómo presentar el inmueble, qué canales usar y qué conversación debe provocar; no confundimos publicaciones con resultados.</p></article><article class="value-card"><span class="number">03 / Transparencia</span><h3>Todo paso tiene contexto</h3><p>Compartimos actividad, interés, visitas y próximos pasos. La información no se queda en un chat; se convierte en seguimiento útil.</p></article></div></div></section>
+    <section class="quiet" id="como-trabajamos"><div class="shell split"><div class="split-copy"><p class="eyebrow">Cómo trabajamos</p><h2>Cercanos en la relación. Rigurosos en la ejecución.</h2><p>La tecnología no sustituye al asesor: le ayuda a responder mejor, conservar el contexto y dar visibilidad a lo que ocurre detrás de cada venta o alquiler.</p><a class="button primary" href="#contacto">Hablemos de tu propiedad <span aria-hidden="true">→</span></a></div><div class="steps"><div class="step"><span>01</span><div><h3>Entendemos tu objetivo</h3><p>Precio, tiempos, condiciones, documentación y tipo de comprador que buscas.</p></div><em>Escucha</em></div><div class="step"><span>02</span><div><h3>Construimos la estrategia</h3><p>Valoración orientativa, narrativa del inmueble, materiales y distribución por canal.</p></div><em>Plan</em></div><div class="step"><span>03</span><div><h3>Gestionamos cada interés</h3><p>Consultas, calificación, visitas y feedback se atienden sin perder origen ni seguimiento.</p></div><em>Acción</em></div><div class="step"><span>04</span><div><h3>Te acompañamos hasta el cierre</h3><p>Oferta, negociación y siguientes pasos con comunicación clara y coordinación profesional.</p></div><em>Cierre</em></div></div></div></section>
+    <section class="differentiation" id="comprar"><div class="shell"><header class="section-head"><div><p class="eyebrow">Por qué Balo</p><h2>Lo personal deja de ser una promesa cuando se puede ver.</h2></div><p>En Lima, la oferta ya habla de asesoría, marketing y acompañamiento. Balo se diferencia al unir esos valores con trazabilidad operativa: una experiencia cercana y, a la vez, verificable.</p></header><div class="difference-table" role="table" aria-label="Diferenciación de Balo"><div class="difference-row" role="row"><strong>Momento</strong><strong>Lo habitual</strong><strong>Con Balo</strong></div><div class="difference-row" role="row"><span>Antes de publicar</span><p>Precio y aviso preparados como tareas aisladas.</p><p class="balo">Entendemos el caso, explicamos la estrategia y dejamos claro el plan de salida.</p></div><div class="difference-row" role="row"><span>Durante la difusión</span><p>Alcance y contactos sin un relato único.</p><p class="balo">Cada post, portal y consulta se conecta con el inmueble y el responsable que dará seguimiento.</p></div><div class="difference-row" role="row"><span>Después de una visita</span><p>Información fragmentada entre conversaciones y personas.</p><p class="balo">Feedback, interés, objeciones y próxima acción quedan visibles para avanzar sin repetir la historia.</p></div><div class="difference-row" role="row"><span>Para el propietario</span><p>Actualizaciones cuando el cliente las solicita.</p><p class="balo">Una relación proactiva: actividad, avance y recomendación explicados en un mismo lugar.</p></div></div><p class="difference-note">Contexto de mercado: firmas limeñas comunican asesoría personalizada, marketing, transparencia y acompañamiento; los portales concentran difusión y comparables. Balo toma esos mínimos esperados y los convierte en una operación cercana, conectada y medible. <a href="https://gie.pe/" target="_blank" rel="noreferrer">GIE</a> · <a href="https://www.mak.com.pe/" target="_blank" rel="noreferrer">MAK</a> · <a href="https://urbania.pe/publica-tu-aviso/particular.html" target="_blank" rel="noreferrer">Urbania</a></p></div></section>
+    <section><div class="shell owner-panel"><div class="owner-copy"><p class="eyebrow">Para propietarios</p><h2>La tranquilidad de saber qué está pasando.</h2><p>En lugar de esperar una actualización aislada, Balo propone una vista simple del avance: publicaciones, interés, visitas y decisiones pendientes. El asesor sigue siendo cercano; la información deja de depender de memoria o mensajes dispersos.</p><a class="button ghost" href="outputs/prototipo_orlando_barraza_balo_inmobiliaria.html">Ver propuesta operativa</a></div><div class="owner-ui" aria-label="Ejemplo de seguimiento de un propietario"><div class="ui-head"><strong>Avance de tu inmueble</strong><span>Activo</span></div><div class="ui-kpis"><div><small>Publicaciones</small><strong>04</strong></div><div><small>Consultas</small><strong>18</strong></div><div><small>Visitas</small><strong>05</strong></div></div><div class="mini-timeline"><p><i></i>Video publicado en Instagram <time>Hoy</time></p><p><i></i>Visita confirmada <time>Jue 18:00</time></p><p><i></i>Revisión de precio programada <time>Vie</time></p></div></div></div></section>
+    <section class="contact" id="contacto"><div class="shell contact-grid"><div class="contact-copy"><p class="eyebrow">Conversemos</p><h2>Tu propiedad merece una historia bien contada.</h2><p>Cuéntanos qué necesitas. Esta demostración no envía datos todavía; al publicar la versión final conectaremos este formulario al canal de atención que elijas.</p><div class="contact-points"><div><i></i>Venta, alquiler o inversión con acompañamiento cercano.</div><div><i></i>Estrategia de difusión hecha para el contexto de cada inmueble.</div><div><i></i>Seguimiento claro desde la primera conversación.</div></div></div><form id="contact-form"><h3>Conoce el enfoque Balo</h3><div class="form-grid"><label>Nombre<input name="name" required placeholder="Tu nombre"></label><label>Teléfono<input name="phone" required placeholder="Tu número"></label></div><label>¿Qué necesitas?<select name="need" required><option value="">Selecciona una opción</option><option>Vender una propiedad</option><option>Alquilar una propiedad</option><option>Comprar o invertir</option><option>Conocer Balo Inmobiliaria</option></select></label><label>Distrito<select name="district" required><option value="">Selecciona un distrito</option><option>Miraflores</option><option>San Isidro</option><option>Santiago de Surco</option><option>Barranco</option><option>La Molina</option><option>Otro distrito de Lima</option></select></label><button class="button accent" type="submit">Quiero que me contacten <span aria-hidden="true">→</span></button><p class="form-message" id="form-message" aria-live="polite">Gracias. Hemos registrado una solicitud de demostración; conecta este formulario a WhatsApp o CRM antes del lanzamiento público.</p></form></div></section>
+  </main>
+  <footer><div class="shell footer"><div class="footer-brand"><img src="public/balo-logo.svg" alt="Balo"><span>Inmobiliaria<br>bienes raíces</span></div><small>Prototipo conceptual · Datos, inmuebles y métricas mostrados a modo de ejemplo. Balo Inmobiliaria · Lima, Perú.</small></div></footer>
+  <script>
+    const toggle=document.getElementById('menu-toggle'); const nav=document.getElementById('nav-links');
+    toggle.addEventListener('click',()=>{const open=nav.classList.toggle('open');toggle.setAttribute('aria-expanded',String(open));});
+    nav.querySelectorAll('a').forEach(link=>link.addEventListener('click',()=>{nav.classList.remove('open');toggle.setAttribute('aria-expanded','false');}));
+    document.getElementById('contact-form').addEventListener('submit',event=>{event.preventDefault();document.getElementById('form-message').classList.add('visible');});
+  </script>
 </body>
 </html>

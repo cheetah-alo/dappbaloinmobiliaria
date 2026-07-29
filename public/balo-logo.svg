@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 88" width="300" height="88">
+  <path d="M14 78V44C14 23 27 10 44 10C61 10 74 23 74 44V78" fill="none" stroke="#123a41" stroke-width="7" stroke-linecap="round"/>
+  <path d="M44 10V78" stroke="#c1613f" stroke-width="5" stroke-linecap="round"/>
+  <text x="98" y="58" font-family="Plus Jakarta Sans, sans-serif" font-weight="800" font-size="44" fill="#123a41" letter-spacing="-1">Balo</text>
+</svg>
