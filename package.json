@@ -19,7 +19,7 @@
     "lint": "npm run lint --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "test:integration": "npm run test:integration --workspace=@balo/edge-api",
-    "test:e2e": "npm run build --workspace=@balo/marketing && playwright test",
+    "test:e2e": "npm run build --workspace=@balo/marketing && npm run build --workspace=@balo/ops && playwright test",
     "check:worker": "npm run check --workspace=@balo/edge-api",
     "verify": "npm run lint && npm run test && npm run build && npm run check:worker"
   },

@@ -12,8 +12,8 @@ privado para el equipo. Los prototipos históricos se conservan en
 | Área | Ubicación | Propósito |
 | --- | --- | --- |
 | Web comercial | `apps/marketing` | Landing estática, formulario consentido y WhatsApp de respaldo. |
-| Portal interno | `apps/ops` | Vista de operaciones con datos ficticios y controles de asignación. |
-| API perimetral | `apps/edge-api` | Cloudflare Worker: valida entradas, firma gateway y falla de forma honesta. |
+| Portal interno | `apps/ops` | Operación por asignación; demo ficticia local y API protegida por Access al activarse. |
+| API perimetral | `apps/edge-api` | Cloudflare Worker: valida entradas, Access JWT, gateway firmado y fallos honestos. |
 | Gateway Sheets | `apps/sheets-gateway` | Proyecto de Google Apps Script para la cuenta de Orlando. No se despliega desde aquí. |
 | Contratos | `packages/contracts` | Tipos, permisos, aprobaciones, eventos y pruebas compartidas. |
 | Decisiones y despliegue | `docs/` | Guías de cuentas, límites, privacidad y activación manual. |
@@ -23,7 +23,8 @@ privado para el equipo. Los prototipos históricos se conservan en
 - Orlando es la cuenta administradora y propietaria de GitHub, Google,
   Cloudflare, dominio y credenciales de canal.
 - Un gestor (`user`) solo ve y actualiza registros que tenga asignados. Orlando
-  (`admin`) puede aprobar las decisiones sensibles.
+  (`admin`) puede asignar y aprobar las decisiones sensibles. La regla se aplica
+  en el Worker, no solo en la interfaz.
 - Precio, publicación, comisión, descuento y cierre no cambian sin una
   aprobación de Orlando registrada.
 - Ningún formulario, webhook o publicación se confirma como exitoso si el

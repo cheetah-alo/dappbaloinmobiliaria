@@ -16,12 +16,19 @@ web comercial.
 5. Ejecuta una prueba con un evento ficticio. Solo después se apunta el Worker
    de *staging* a la URL de Orlando.
 
-El gateway crea tres hojas si faltan: `Leads`, `Auditoria` y `Eventos de canal`.
-El Worker envía `event_id`, marca de tiempo y firma HMAC de vida corta como
-parámetros de la URL, porque Apps Script no expone cabeceras HTTP arbitrarias a
-`doPost`; el cuerpo permanece en JSON. El `event_id` se verifica dentro de un
-bloqueo para que un reintento no duplique una fila. Una firma HMAC inválida, una
-marca de tiempo caducada o un cuerpo no válido no se registra como éxito.
+El gateway crea las hojas operativas si faltan: `Usuarios`, `Leads`,
+`Inmuebles`, `Actividades`, `Aprobaciones`, `Auditoria` y `Eventos de canal`.
+El Worker envía un único sobre JSON con `{ timestamp, signature, event }`; la
+firma HMAC cubre una serialización determinista de la marca y del evento. No se
+aceptan firma, identificador ni marca de tiempo por URL o cabecera. El
+`event_id` se verifica dentro de un bloqueo para que un reintento no duplique
+una fila. Una firma HMAC inválida, una marca de tiempo caducada o un cuerpo no
+válido no se registra como éxito.
+
+Antes de operar, Orlando crea las filas activas de `Usuarios` con `id`, nombre,
+correo, rol (`admin` o `user`) y estado `active`. El identificador debe
+corresponder al sujeto de Cloudflare Access o el correo al correo autenticado.
+Las fórmulas introducidas como datos se neutralizan antes de guardarse en Sheets.
 
 No se incluye `appsscript.json` desplegable ni un ID de script: estos recursos
 deben pertenecer a la cuenta del cliente.
