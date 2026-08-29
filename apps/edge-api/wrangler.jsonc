@@ -9,23 +9,44 @@
     "enabled": true,
     "head_sampling_rate": 1
   },
+  "secrets": {
+    "required": ["CSRF_SECRET", "GATEWAY_HMAC_SECRET", "GATEWAY_URL", "TURNSTILE_SECRET"]
+  },
   "vars": {
     "ALLOWED_ORIGIN": "http://localhost:5173",
-    "ALLOW_TEST_BYPASS": "false"
+    "ALLOW_TEST_BYPASS": "false",
+    "OPS_ALLOWED_ORIGIN": "http://localhost:5174",
+    "POLICY_AUD": "",
+    "RUNTIME_ENV": "development",
+    "TEAM_DOMAIN": ""
   },
   "env": {
     "staging": {
       "name": "balo-pilot-api-staging",
+      "secrets": {
+        "required": ["CSRF_SECRET", "GATEWAY_HMAC_SECRET", "GATEWAY_URL", "TURNSTILE_SECRET"]
+      },
       "vars": {
         "ALLOWED_ORIGIN": "https://staging.example.invalid",
-        "ALLOW_TEST_BYPASS": "false"
+        "ALLOW_TEST_BYPASS": "false",
+        "OPS_ALLOWED_ORIGIN": "https://ops.staging.example.invalid",
+        "POLICY_AUD": "",
+        "RUNTIME_ENV": "staging",
+        "TEAM_DOMAIN": ""
       }
     },
     "production": {
       "name": "balo-pilot-api-production",
+      "secrets": {
+        "required": ["CSRF_SECRET", "GATEWAY_HMAC_SECRET", "GATEWAY_URL", "TURNSTILE_SECRET"]
+      },
       "vars": {
         "ALLOWED_ORIGIN": "https://example.invalid",
-        "ALLOW_TEST_BYPASS": "false"
+        "ALLOW_TEST_BYPASS": "false",
+        "OPS_ALLOWED_ORIGIN": "https://ops.example.invalid",
+        "POLICY_AUD": "",
+        "RUNTIME_ENV": "production",
+        "TEAM_DOMAIN": ""
       }
     }
   }
