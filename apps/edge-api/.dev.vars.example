@@ -1,0 +1,4 @@
+# Solo para desarrollo local. Nunca subas este archivo renombrado como .dev.vars.
+# GATEWAY_URL=https://script.google.com/macros/s/ORLANDO_DEPLOYMENT_ID/exec
+# GATEWAY_HMAC_SECRET=un-secreto-unico-y-largo
+# TURNSTILE_SECRET=clave-privada-de-turnstile

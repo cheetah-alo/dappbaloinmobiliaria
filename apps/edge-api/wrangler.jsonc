@@ -1,0 +1,32 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "balo-pilot-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-29",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "vars": {
+    "ALLOWED_ORIGIN": "http://localhost:5173",
+    "ALLOW_TEST_BYPASS": "false"
+  },
+  "env": {
+    "staging": {
+      "name": "balo-pilot-api-staging",
+      "vars": {
+        "ALLOWED_ORIGIN": "https://staging.example.invalid",
+        "ALLOW_TEST_BYPASS": "false"
+      }
+    },
+    "production": {
+      "name": "balo-pilot-api-production",
+      "vars": {
+        "ALLOWED_ORIGIN": "https://example.invalid",
+        "ALLOW_TEST_BYPASS": "false"
+      }
+    }
+  }
+}

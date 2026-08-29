@@ -1,0 +1,44 @@
+{
+  "name": "balo-pilot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Piloto trazable de captación y operación para Balo Inmobiliaria.",
+  "engines": {
+    "node": ">=20.19"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:marketing": "npm run dev --workspace=@balo/marketing",
+    "dev:ops": "npm run dev --workspace=@balo/ops",
+    "dev:api": "npm run dev --workspace=@balo/edge-api",
+    "build": "npm run build --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "test:integration": "npm run test:integration --workspace=@balo/edge-api",
+    "test:e2e": "npm run build --workspace=@balo/marketing && playwright test",
+    "check:worker": "npm run check --workspace=@balo/edge-api",
+    "verify": "npm run lint && npm run test && npm run build && npm run check:worker"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.35.0",
+    "@playwright/test": "^1.55.0",
+    "@types/node": "^24.3.1",
+    "@types/react": "^19.1.12",
+    "@types/react-dom": "^19.1.9",
+    "@vitejs/plugin-react": "^5.0.2",
+    "eslint": "^9.35.0",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-refresh": "^0.4.20",
+    "globals": "^16.3.0",
+    "playwright": "^1.55.0",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.42.0",
+    "vite": "^7.1.4",
+    "vitest": "^3.2.4",
+    "wrangler": "^4.36.0"
+  }
+}

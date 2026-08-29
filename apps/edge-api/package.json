@@ -1,0 +1,16 @@
+{
+  "name": "@balo/edge-api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --local",
+    "check": "wrangler types --check && tsc --noEmit",
+    "lint": "eslint src test",
+    "test": "vitest run",
+    "test:integration": "vitest run test/worker.integration.test.ts"
+  },
+  "dependencies": {
+    "@balo/contracts": "*"
+  }
+}

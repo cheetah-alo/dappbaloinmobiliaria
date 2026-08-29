@@ -1,0 +1,38 @@
+project_id: balo_pilot
+project_name: Balo - piloto de captacion y operacion
+project_type: public_web_and_internal_portal
+language: es
+
+purpose: >-
+  Captar conversaciones consentidas para Balo Inmobiliaria y ordenar la
+  operacion interna con trazabilidad y aprobaciones de Orlando.
+
+product_boundaries:
+  public_web: apps/marketing
+  internal_portal: apps/ops
+  edge_api: apps/edge-api
+  sheets_gateway: apps/sheets-gateway
+  shared_contracts: packages/contracts
+  legacy_urls: outputs/
+
+ownership:
+  account_owner: Orlando Barraza
+  required_accounts: [github, google, cloudflare, domain, channel_apis]
+  technical_team_accounts: testing_only
+
+access_model:
+  admin: Orlando
+  user: gestores_only_assigned_records
+  sensitive_approvals: [price, publication, commission, discount, closure]
+
+deployment:
+  github_pages: manual_after_orlando_approval
+  cloudflare_worker: manual_after_orlando_approval
+  live_integrations: disabled_until_official_credentials
+
+validation:
+  required_commands:
+    - npm run verify
+    - npm run test:e2e
+  non_production_limits:
+    - No production deployment is certified without Orlando accounts, domain, Access policy, consent review and official API credentials.
