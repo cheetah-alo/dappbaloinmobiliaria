@@ -11,6 +11,7 @@
     "test:integration": "vitest run test/worker.integration.test.ts"
   },
   "dependencies": {
-    "@balo/contracts": "*"
+    "@balo/contracts": "*",
+    "jose": "^6.2.10"
   }
 }
