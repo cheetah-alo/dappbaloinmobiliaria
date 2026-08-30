@@ -6,29 +6,55 @@ import {
   canApprove,
   canAssign,
   canCreateActivity,
+  canCreateProperty,
+  canChangePropertyAvailability,
+  canEditProperty,
+  canPublishProperty,
   canRequestApproval,
+  propertyAvailabilityStatuses,
+  propertyAvailabilityFreshness,
+  propertyImageCategories,
+  propertyOperations,
+  propertyPublicationStatuses,
+  priceVisibilities,
+  toCatalogProperty,
   type Activity,
   type ActivityType,
   type Actor,
   type Approval,
   type ApprovalKind,
+  type CatalogExport,
   type GatewayResult,
   type Lead,
   type OpsSnapshot,
   type OwnerEnquiry,
   type PersistedEvent,
   type Property,
+  type PropertyAvailabilityStatus,
+  type PropertyImage,
+  type PropertyImageCategory,
+  type PropertyOperation,
+  type PropertyPublicationStatus,
+  type PropertyRevision,
+  type PublicationJob,
+  type PriceVisibility,
 } from '@balo/contracts';
 
 type WorkerEnv = Env;
 type FetchImplementation = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
-type GatewayEventType = PersistedEvent['eventType'] | 'ops_snapshot' | 'ops_assignment' | 'ops_activity' | 'ops_approval_request' | 'ops_approval_decision';
+type GatewayEventType = PersistedEvent['eventType'] | 'ops_snapshot' | 'ops_assignment' | 'ops_activity' | 'ops_approval_request' | 'ops_approval_decision' | 'cms_property_snapshot' | 'cms_publication_job_snapshot' | 'cms_property_create' | 'cms_property_update' | 'cms_media_intent' | 'cms_media_complete' | 'cms_media_update' | 'cms_property_submit' | 'cms_property_publish' | 'cms_property_availability' | 'cms_publication_callback' | 'cms_availability_sweep';
 type GatewayEvent = { eventId: string; eventType: GatewayEventType; occurredAt: string; payload: Record<string, unknown> };
 type GatewayEnvelope = { timestamp: string; signature: string; event: GatewayEvent };
 type GatewaySnapshot = OpsSnapshot & { actor: Actor; users: Actor[] };
 type Principal = { subject: string; email?: string; testActor?: Actor };
+type CmsPropertySnapshot = { actor: Actor; property: Property; revision: PropertyRevision; images: PropertyImage[]; publicationJobs: PublicationJob[] };
+type CmsCatalogEntry = { property: Property; revision: PropertyRevision; images: PropertyImage[]; publicationTarget: 'active' | 'candidate' };
+type CmsJobSnapshot = { catalogEntries: CmsCatalogEntry[]; publicationJob: PublicationJob };
+type CmsImageIntent = { intentId: string; imageId: string; propertyId: string; revisionId: string; objectKey: string; expiresAt: string; uploadToken: string; sizeBytes: number; sha256: string; uploadUrl?: string | null };
+type MediaTokenClaims = { intentId: string; imageId: string; propertyId: string; revisionId: string; expiresAt: string; sizeBytes: number; sha256: string; variant: 'main' | 'thumbnail' };
 
-const maxBodyBytes = 16_384;
+const maxBodyBytes = 256 * 1024;
+const maxPropertyImageBytes = 12 * 1024 * 1024;
 const identifierPattern = /^[A-Za-z0-9_-]{1,120}$/;
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const enquiryOperations = new Set<OwnerEnquiry['operation']>(['sell', 'rent', 'buy', 'invest']);
@@ -37,6 +63,11 @@ const leadStages = new Set<Lead['stage']>(['new', 'qualified', 'visit_scheduled'
 const approvalStatuses = new Set<Approval['status']>(['pending', 'approved', 'rejected']);
 const activityTypeSet = new Set<ActivityType>(activityTypes);
 const approvalKindSet = new Set<ApprovalKind>(approvalKinds);
+const propertyPublicationStatusSet = new Set<PropertyPublicationStatus>(propertyPublicationStatuses);
+const propertyAvailabilityStatusSet = new Set<PropertyAvailabilityStatus>(propertyAvailabilityStatuses);
+const propertyOperationSet = new Set<PropertyOperation>(propertyOperations);
+const priceVisibilitySet = new Set<PriceVisibility>(priceVisibilities);
+const imageCategorySet = new Set<PropertyImageCategory>(propertyImageCategories);
 
 function secret(env: WorkerEnv, key: string): string | undefined {
   const value = Reflect.get(env, key);
@@ -67,7 +98,7 @@ function json(body: Record<string, unknown>, status: number, request: Request, e
   const isOpsOrigin = origin === env.OPS_ALLOWED_ORIGIN;
   if (origin && (isMarketingOrigin || isOpsOrigin)) {
     headers.set('access-control-allow-origin', origin);
-    headers.set('access-control-allow-methods', 'GET, POST, OPTIONS');
+    headers.set('access-control-allow-methods', 'GET, POST, PUT, PATCH, OPTIONS');
     headers.set('access-control-allow-headers', 'content-type, idempotency-key, cf-access-jwt-assertion, x-balo-csrf');
     if (isOpsOrigin) headers.set('access-control-allow-credentials', 'true');
   }
@@ -385,8 +416,26 @@ function parseLead(value: unknown): Lead | null {
 }
 
 function parseProperty(value: unknown): Property | null {
-  if (!isRecord(value) || !isIdentifier(value.id) || !isIdentifier(value.assigneeId) || typeof value.label !== 'string' || !['draft', 'approved', 'published', 'paused'].includes(String(value.publicationStatus))) return null;
-  return { id: value.id, label: value.label, assigneeId: value.assigneeId, publicationStatus: value.publicationStatus as Property['publicationStatus'] };
+  if (!isRecord(value) || !isIdentifier(value.id) || typeof value.assigneeId !== 'string' || value.assigneeId.length > 120 || typeof value.label !== 'string') return null;
+  const publicationStatus = propertyPublicationStatusSet.has(value.publicationStatus as PropertyPublicationStatus) ? value.publicationStatus as PropertyPublicationStatus : 'draft';
+  const availabilityStatus = propertyAvailabilityStatusSet.has(value.availabilityStatus as PropertyAvailabilityStatus) ? value.availabilityStatus as PropertyAvailabilityStatus : 'available';
+  const version = typeof value.version === 'number' && Number.isInteger(value.version) && value.version > 0 ? value.version : 1;
+  const createdAt = typeof value.createdAt === 'string' ? value.createdAt : new Date(0).toISOString();
+  const updatedAt = typeof value.updatedAt === 'string' ? value.updatedAt : createdAt;
+  return {
+    id: value.id,
+    slug: typeof value.slug === 'string' && value.slug.length > 0 ? value.slug : value.id,
+    label: value.label,
+    assigneeId: value.assigneeId,
+    publicationStatus,
+    availabilityStatus,
+    version,
+    createdAt,
+    updatedAt,
+    ...(isIdentifier(value.activeRevisionId) ? { activeRevisionId: value.activeRevisionId } : {}),
+    ...(isIdentifier(value.draftRevisionId) ? { draftRevisionId: value.draftRevisionId } : {}),
+    ...(typeof value.lastVerifiedAt === 'string' ? { lastVerifiedAt: value.lastVerifiedAt } : {}),
+  };
 }
 
 function parseActivity(value: unknown): Activity | null {
@@ -623,15 +672,596 @@ async function opsLeads(request: Request, env: WorkerEnv, fetchImplementation: F
   return json({ ok: true, actor: state.actor, leads: state.snapshot.leads }, 200, request, env);
 }
 
+function propertyIdFromPath(pathname: string, suffix?: string): string | null {
+  const expression = suffix
+    ? new RegExp(`^/v1/ops/properties/([A-Za-z0-9_-]{1,120})/${suffix}$`)
+    : /^\/v1\/ops\/properties\/([A-Za-z0-9_-]{1,120})$/;
+  const match = expression.exec(pathname);
+  return match?.[1] && isIdentifier(match[1]) ? match[1] : null;
+}
+
+function isSafeSlug(value: unknown): value is string {
+  return typeof value === 'string' && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value) && value.length <= 100;
+}
+
+function nonNegativeInteger(value: unknown, max: number): number | null {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= max ? value : null;
+}
+
+function positiveNumber(value: unknown, max: number): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 && value <= max ? value : null;
+}
+
+function expectedVersion(input: Record<string, unknown>): number | null {
+  return typeof input.expectedVersion === 'number' && Number.isInteger(input.expectedVersion) && input.expectedVersion > 0 ? input.expectedVersion : null;
+}
+
+function optionalIdentifier(value: unknown): string | undefined {
+  return isIdentifier(value) ? value : undefined;
+}
+
+function optionalHttpsUrl(value: unknown): string | undefined {
+  const candidate = optionalBoundedText(value, 2_048);
+  if (!candidate) return undefined;
+  try {
+    const url = new URL(candidate);
+    return url.protocol === 'https:' ? url.toString() : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function parseMoney(value: unknown): PropertyRevision['askingPrice'] | null | undefined {
+  if (value === undefined) return undefined;
+  if (!isRecord(value) || (value.currency !== 'PEN' && value.currency !== 'USD')) return null;
+  const amount = positiveNumber(value.amount, 100_000_000);
+  return amount === null ? null : { currency: value.currency, amount };
+}
+
+function parsePrivateDetails(value: unknown): PropertyRevision['privateDetails'] | null {
+  if (value === undefined) return {};
+  if (!isRecord(value)) return null;
+  const exactAddress = optionalBoundedText(value.exactAddress, 500);
+  const ownerReference = optionalBoundedText(value.ownerReference, 240);
+  const documentNotes = optionalBoundedText(value.documentNotes, 4_000);
+  const negotiationNotes = optionalBoundedText(value.negotiationNotes, 4_000);
+  const supplied = ['exactAddress', 'ownerReference', 'documentNotes', 'negotiationNotes'];
+  if (supplied.some((key) => value[key] !== undefined && !optionalBoundedText(value[key], key === 'exactAddress' ? 500 : key === 'ownerReference' ? 240 : 4_000))) return null;
+  return {
+    ...(exactAddress ? { exactAddress } : {}),
+    ...(ownerReference ? { ownerReference } : {}),
+    ...(documentNotes ? { documentNotes } : {}),
+    ...(negotiationNotes ? { negotiationNotes } : {}),
+  };
+}
+
+function parseRevisionInput(value: unknown, propertyId: string, actorId: string, id: string, revision: number, now: string): PropertyRevision | null {
+  if (!isRecord(value)) return null;
+  const title = boundedText(value.title, 3, 180);
+  const district = boundedText(value.district, 2, 120);
+  const summary = boundedText(value.summary, 10, 4_000);
+  const operation = propertyOperationSet.has(value.operation as PropertyOperation) ? value.operation as PropertyOperation : null;
+  const priceVisibility = priceVisibilitySet.has(value.priceVisibility as PriceVisibility) ? value.priceVisibility as PriceVisibility : null;
+  const builtAreaM2 = positiveNumber(value.builtAreaM2, 1_000_000);
+  const bedrooms = nonNegativeInteger(value.bedrooms, 100);
+  const bathrooms = nonNegativeInteger(value.bathrooms, 100);
+  const parking = nonNegativeInteger(value.parking, 100);
+  const studies = nonNegativeInteger(value.studies, 100);
+  const features = Array.isArray(value.features) && value.features.length <= 60
+    ? value.features.map((feature) => boundedText(feature, 1, 160))
+    : null;
+  const privateDetails = parsePrivateDetails(value.privateDetails);
+  const askingPrice = parseMoney(value.askingPrice);
+  const totalAreaM2 = value.totalAreaM2 === undefined ? undefined : positiveNumber(value.totalAreaM2, 1_000_000);
+  if (!title || !district || !summary || !operation || !priceVisibility || builtAreaM2 === null || bedrooms === null || bathrooms === null || parking === null || studies === null || !features || features.some((feature) => feature === null) || !privateDetails || askingPrice === null || totalAreaM2 === null) return null;
+  if (priceVisibility === 'public' && !askingPrice) return null;
+  const zone = optionalBoundedText(value.zone, 120);
+  const sourceUrl = value.sourceUrl === undefined ? undefined : optionalHttpsUrl(value.sourceUrl);
+  const instagramUrl = value.instagramUrl === undefined ? undefined : optionalHttpsUrl(value.instagramUrl);
+  if ((value.sourceUrl !== undefined && !sourceUrl) || (value.instagramUrl !== undefined && !instagramUrl)) return null;
+  return {
+    id, propertyId, revision, title, operation, district,
+    ...(zone ? { zone } : {}), builtAreaM2, ...(totalAreaM2 ? { totalAreaM2 } : {}), bedrooms, bathrooms, parking, studies, summary,
+    features: features as string[], priceVisibility, ...(askingPrice ? { askingPrice } : {}),
+    ...(optionalIdentifier(value.priceApprovalId) ? { priceApprovalId: optionalIdentifier(value.priceApprovalId) } : {}),
+    ...(optionalIdentifier(value.photoApprovalId) ? { photoApprovalId: optionalIdentifier(value.photoApprovalId) } : {}),
+    ...(optionalIdentifier(value.publicationApprovalId) ? { publicationApprovalId: optionalIdentifier(value.publicationApprovalId) } : {}),
+    ...(optionalIdentifier(value.photoAuthorizationConfirmedBy) ? { photoAuthorizationConfirmedBy: optionalIdentifier(value.photoAuthorizationConfirmedBy) } : {}),
+    ...(typeof value.photoAuthorizationConfirmedAt === 'string' && Number.isFinite(Date.parse(value.photoAuthorizationConfirmedAt)) ? { photoAuthorizationConfirmedAt: value.photoAuthorizationConfirmedAt } : {}),
+    ...(sourceUrl ? { sourceUrl } : {}), ...(instagramUrl ? { instagramUrl } : {}), ...(optionalBoundedText(value.postId, 120) ? { postId: optionalBoundedText(value.postId, 120) } : {}),
+    privateDetails, createdBy: actorId, createdAt: now, updatedAt: now,
+  };
+}
+
+function parseStoredRevision(value: unknown): PropertyRevision | null {
+  if (!isRecord(value) || !isIdentifier(value.id) || !isIdentifier(value.propertyId) || typeof value.revision !== 'number' || !Number.isInteger(value.revision) || value.revision < 1) return null;
+  return parseRevisionInput(value, value.propertyId, isIdentifier(value.createdBy) ? value.createdBy : 'system', value.id, value.revision, typeof value.createdAt === 'string' ? value.createdAt : new Date(0).toISOString())
+    ? {
+      ...(parseRevisionInput(value, value.propertyId, isIdentifier(value.createdBy) ? value.createdBy : 'system', value.id, value.revision, typeof value.createdAt === 'string' ? value.createdAt : new Date(0).toISOString())!),
+      createdBy: value.createdBy as string,
+      createdAt: value.createdAt as string,
+      updatedAt: typeof value.updatedAt === 'string' ? value.updatedAt : value.createdAt as string,
+    }
+    : null;
+}
+
+function parseImage(value: unknown): PropertyImage | null {
+  if (!isRecord(value) || !isIdentifier(value.id) || !isIdentifier(value.propertyId) || !isIdentifier(value.revisionId) || !imageCategorySet.has(value.category as PropertyImageCategory) || typeof value.alt !== 'string' || typeof value.isCover !== 'boolean' || value.mimeType !== 'image/webp' || typeof value.privateObjectKey !== 'string') return null;
+  const sortOrder = nonNegativeInteger(value.sortOrder, 10_000);
+  const width = nonNegativeInteger(value.width, 20_000);
+  const height = nonNegativeInteger(value.height, 20_000);
+  const sizeBytes = nonNegativeInteger(value.sizeBytes, maxPropertyImageBytes);
+  if (sortOrder === null || width === null || height === null || sizeBytes === null || !['uploading', 'uploaded', 'approved', 'rejected'].includes(String(value.status))) return null;
+  return {
+    id: value.id, propertyId: value.propertyId, revisionId: value.revisionId, category: value.category as PropertyImageCategory, alt: value.alt, sortOrder, isCover: value.isCover,
+    width, height, sizeBytes, mimeType: 'image/webp', privateObjectKey: value.privateObjectKey,
+    ...(typeof value.publicObjectKey === 'string' ? { publicObjectKey: value.publicObjectKey } : {}), ...(typeof value.thumbnailObjectKey === 'string' ? { thumbnailObjectKey: value.thumbnailObjectKey } : {}),
+    status: value.status as PropertyImage['status'], ...(typeof value.uploadedAt === 'string' ? { uploadedAt: value.uploadedAt } : {}),
+  };
+}
+
+function parsePublicationJob(value: unknown): PublicationJob | null {
+  if (!isRecord(value) || !isIdentifier(value.id) || !isIdentifier(value.propertyId) || !isIdentifier(value.revisionId) || !isIdentifier(value.requestedBy) || !['queued', 'running', 'succeeded', 'failed'].includes(String(value.status)) || typeof value.snapshotVersion !== 'number' || !Number.isInteger(value.snapshotVersion) || typeof value.requestedAt !== 'string') return null;
+  return { id: value.id, propertyId: value.propertyId, revisionId: value.revisionId, requestedBy: value.requestedBy, status: value.status as PublicationJob['status'], snapshotVersion: value.snapshotVersion, requestedAt: value.requestedAt, ...(typeof value.completedAt === 'string' ? { completedAt: value.completedAt } : {}), ...(typeof value.deploymentUrl === 'string' ? { deploymentUrl: value.deploymentUrl } : {}), ...(typeof value.errorCode === 'string' ? { errorCode: value.errorCode } : {}) };
+}
+
+function parseCmsSnapshot(value: unknown): CmsPropertySnapshot | null {
+  if (!isRecord(value) || value.ok !== true) return null;
+  const actor = parseActor(value.actor);
+  const property = parseProperty(value.property);
+  const revision = parseStoredRevision(value.revision);
+  const images = Array.isArray(value.images) ? value.images.map(parseImage) : null;
+  const publicationJobs = Array.isArray(value.publicationJobs) ? value.publicationJobs.map(parsePublicationJob) : null;
+  if (!actor || !property || !revision || !images || !publicationJobs || images.some((image) => image === null) || publicationJobs.some((job) => job === null)) return null;
+  return { actor, property, revision, images: images as PropertyImage[], publicationJobs: publicationJobs as PublicationJob[] };
+}
+
+async function loadCmsPropertySnapshot(actor: Actor, propertyId: string, env: WorkerEnv, fetchImplementation: FetchImplementation): Promise<CmsPropertySnapshot | null> {
+  const response = await sendGatewayEvent({ eventId: crypto.randomUUID(), eventType: 'cms_property_snapshot', occurredAt: new Date().toISOString(), payload: { actor, propertyId } }, env, fetchImplementation);
+  if (!response?.ok) return null;
+  try { return parseCmsSnapshot(await response.json() as unknown); } catch { return null; }
+}
+
+function parseCmsJobSnapshot(value: unknown): CmsJobSnapshot | null {
+  if (!isRecord(value) || value.ok !== true) return null;
+  const catalogEntries = Array.isArray(value.catalogEntries) ? value.catalogEntries.map((entry) => {
+    if (!isRecord(entry) || (entry.publicationTarget !== 'active' && entry.publicationTarget !== 'candidate')) return null;
+    const property = parseProperty(entry.property);
+    const revision = parseStoredRevision(entry.revision);
+    const images = Array.isArray(entry.images) ? entry.images.map(parseImage) : null;
+    if (!property || !revision || !images || images.some((image) => image === null)) return null;
+    return { property, revision, images: images as PropertyImage[], publicationTarget: entry.publicationTarget } satisfies CmsCatalogEntry;
+  }) : null;
+  const publicationJob = parsePublicationJob(value.publicationJob);
+  if (!catalogEntries || !publicationJob || catalogEntries.some((entry) => entry === null)) return null;
+  return { catalogEntries: catalogEntries as CmsCatalogEntry[], publicationJob };
+}
+
+async function loadCmsJobSnapshot(jobId: string, env: WorkerEnv, fetchImplementation: FetchImplementation): Promise<CmsJobSnapshot | null> {
+  const response = await sendGatewayEvent({ eventId: crypto.randomUUID(), eventType: 'cms_publication_job_snapshot', occurredAt: new Date().toISOString(), payload: { jobId } }, env, fetchImplementation);
+  if (!response?.ok) return null;
+  try { return parseCmsJobSnapshot(await response.json() as unknown); } catch { return null; }
+}
+
+function gatewayError(result: Record<string, unknown>, request: Request, env: WorkerEnv): Response | null {
+  if (result.code === 'VERSION_CONFLICT') return json({ ok: false, code: 'VERSION_CONFLICT', ...(typeof result.currentVersion === 'number' ? { currentVersion: result.currentVersion } : {}) }, 409, request, env);
+  if (result.code === 'CATALOG_BUILD_IN_PROGRESS' || result.code === 'PUBLICATION_IN_PROGRESS') return json({ ok: false, code: result.code }, 409, request, env);
+  if (result.code === 'MEDIA_LIMIT_EXCEEDED') return json({ ok: false, code: result.code }, 400, request, env);
+  return null;
+}
+
+async function performCmsMutation(event: GatewayEvent, request: Request, env: WorkerEnv, fetchImplementation: FetchImplementation): Promise<Response> {
+  const response = await sendGatewayEvent(event, env, fetchImplementation);
+  if (!response?.ok) return gatewayFailure(request, env);
+  try {
+    const result = await response.json() as unknown;
+    if (!isRecord(result) || result.eventId !== event.eventId) return gatewayFailure(request, env);
+    const knownError = gatewayError(result, request, env);
+    if (knownError) return knownError;
+    if (result.ok !== true) return json({ ok: false, code: 'GATEWAY_REJECTED', manualFollowUp: true }, 503, request, env);
+    return json({ ok: true, eventId: event.eventId, deduplicated: result.deduplicated === true, data: isRecord(result.data) ? result.data : {} }, 202, request, env);
+  } catch { return gatewayFailure(request, env); }
+}
+
+function hasExpectedVersion(property: Property, version: number, request: Request, env: WorkerEnv): Response | null {
+  return property.version === version ? null : json({ ok: false, code: 'VERSION_CONFLICT', currentVersion: property.version }, 409, request, env);
+}
+
+async function cmsProperties(request: Request, env: WorkerEnv, fetchImplementation: FetchImplementation): Promise<Response> {
+  const state = await authenticatedSnapshot(request, env, fetchImplementation);
+  if (isResponse(state)) return state;
+  return json({ ok: true, data: { actor: state.actor, properties: state.snapshot.properties } }, 200, request, env);
+}
+
+async function cmsProperty(request: Request, env: WorkerEnv, fetchImplementation: FetchImplementation, propertyId: string): Promise<Response> {
+  const state = await authenticatedSnapshot(request, env, fetchImplementation);
+  if (isResponse(state)) return state;
+  if (!state.snapshot.properties.some((property) => property.id === propertyId)) return json({ ok: false, code: 'PROPERTY_NOT_FOUND' }, 404, request, env);
+  const cms = await loadCmsPropertySnapshot(state.actor, propertyId, env, fetchImplementation);
+  if (!cms) return gatewayFailure(request, env);
+  if (!canEditProperty(state.actor, cms.property)) return forbidden('ASSIGNMENT_REQUIRED', request, env);
+  return json({ ok: true, data: cms }, 200, request, env);
+}
+
+async function createProperty(request: Request, env: WorkerEnv, fetchImplementation: FetchImplementation): Promise<Response> {
+  const state = await authenticatedOpsMutation(request, env, fetchImplementation);
+  if (isResponse(state)) return state;
+  if (!canCreateProperty(state.actor)) return forbidden('PROPERTY_CREATE_FORBIDDEN', request, env);
+  const input = await readBoundedJson(request);
+  if (!isRecord(input) || !isRecord(input.property)) return badRequest('INVALID_PROPERTY', request, env);
+  const slug = isSafeSlug(input.property.slug) ? input.property.slug : null;
+  const label = boundedText(input.property.label, 3, 180);
+  const assigneeId = isIdentifier(input.property.assigneeId) ? input.property.assigneeId : state.actor.id;
+  if (!slug || !label || (state.actor.role !== 'admin' && assigneeId !== state.actor.id)) return badRequest('INVALID_PROPERTY', request, env);
+  const now = new Date().toISOString();
+  const propertyId = crypto.randomUUID();
+  const revision = parseRevisionInput(input.revision, propertyId, state.actor.id, crypto.randomUUID(), 1, now);
+  if (!revision) return badRequest('INVALID_PROPERTY_REVISION', request, env);
+  const property: Property = { id: propertyId, slug, label, assigneeId, publicationStatus: 'draft', availabilityStatus: 'available', version: 1, draftRevisionId: revision.id, createdAt: now, updatedAt: now };
+  return performCmsMutation({ eventId: crypto.randomUUID(), eventType: 'cms_property_create', occurredAt: now, payload: { actor: state.actor, property, revision } }, request, env, fetchImplementation);
+}
+
+async function updateProperty(request: Request, env: WorkerEnv, fetchImplementation: FetchImplementation, propertyId: string): Promise<Response> {
+  const state = await authenticatedOpsMutation(request, env, fetchImplementation);
+  if (isResponse(state)) return state;
+  const current = state.snapshot.properties.find((property) => property.id === propertyId);
+  if (!current) return json({ ok: false, code: 'PROPERTY_NOT_FOUND' }, 404, request, env);
+  if (!canEditProperty(state.actor, current)) return forbidden('ASSIGNMENT_REQUIRED', request, env);
+  if (current.publicationStatus === 'publishing') return json({ ok: false, code: 'PUBLICATION_IN_PROGRESS' }, 409, request, env);
+  const input = await readBoundedJson(request);
+  if (!isRecord(input) || !isRecord(input.revision)) return badRequest('INVALID_PROPERTY_UPDATE', request, env);
+  const version = expectedVersion(input);
+  if (!version) return badRequest('EXPECTED_VERSION_REQUIRED', request, env);
+  const mismatch = hasExpectedVersion(current, version, request, env);
+  if (mismatch) return mismatch;
+  const propertyPatch = isRecord(input.property) ? input.property : {};
+  const slug = propertyPatch.slug === undefined ? current.slug : isSafeSlug(propertyPatch.slug) ? propertyPatch.slug : null;
+  const label = propertyPatch.label === undefined ? current.label : boundedText(propertyPatch.label, 3, 180);
+  const assigneeId = propertyPatch.assigneeId === undefined ? current.assigneeId : isIdentifier(propertyPatch.assigneeId) ? propertyPatch.assigneeId : null;
+  if (!slug || !label || !assigneeId || (state.actor.role !== 'admin' && assigneeId !== current.assigneeId)) return badRequest('INVALID_PROPERTY_UPDATE', request, env);
+  const now = new Date().toISOString();
+  const revision = parseRevisionInput(input.revision, propertyId, state.actor.id, crypto.randomUUID(), current.version + 1, now);
+  if (!revision) return badRequest('INVALID_PROPERTY_REVISION', request, env);
+  const property: Property = { ...current, slug, label, assigneeId, draftRevisionId: revision.id, updatedAt: now };
+  return performCmsMutation({ eventId: crypto.randomUUID(), eventType: 'cms_property_update', occurredAt: now, payload: { actor: state.actor, property, revision, expectedVersion: version } }, request, env, fetchImplementation);
+}
+
+function parseIntentFiles(value: unknown): Array<{ category: PropertyImageCategory; alt: string; sortOrder: number; isCover: boolean; sizeBytes: number; mimeType: 'image/webp'; sha256: string }> | null {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 30) return null;
+  const files = value.map((file) => {
+    if (!isRecord(file) || !imageCategorySet.has(file.category as PropertyImageCategory) || file.mimeType !== 'image/webp' || typeof file.isCover !== 'boolean' || typeof file.sha256 !== 'string' || !/^[a-f0-9]{64}$/i.test(file.sha256)) return null;
+    const alt = boundedText(file.alt, 3, 240);
+    const sortOrder = nonNegativeInteger(file.sortOrder, 10_000);
+    const sizeBytes = positiveNumber(file.sizeBytes, maxPropertyImageBytes);
+    return alt && sortOrder !== null && sizeBytes !== null ? { category: file.category as PropertyImageCategory, alt, sortOrder, isCover: file.isCover, sizeBytes, mimeType: 'image/webp' as const, sha256: file.sha256.toLowerCase() } : null;
+  });
+  return files.some((file) => file === null) ? null : files as Array<{ category: PropertyImageCategory; alt: string; sortOrder: number; isCover: boolean; sizeBytes: number; mimeType: 'image/webp'; sha256: string }>;
+}
+
+function mediaUsesR2(env: WorkerEnv): boolean {
+  return mediaBindings(env) !== null;
+}
+
+function mediaBindings(env: WorkerEnv): { privateMedia: R2Bucket; publicMedia: R2Bucket } | null {
+  const privateMedia = env.PRIVATE_MEDIA;
+  const publicMedia = env.PUBLIC_MEDIA;
+  return secret(env, 'MEDIA_BACKEND') === 'r2' && privateMedia && publicMedia ? { privateMedia, publicMedia } : null;
+}
+
+function privateMediaKey(claims: Pick<MediaTokenClaims, 'propertyId' | 'revisionId' | 'imageId'>, variant: 'main' | 'thumbnail' = 'main'): string {
+  return `properties/${claims.propertyId}/${claims.revisionId}/${claims.imageId}${variant === 'thumbnail' ? '-thumb' : ''}.webp`;
+}
+
+async function mediaToken(intent: Omit<CmsImageIntent, 'uploadToken' | 'uploadUrl'>, variant: 'main' | 'thumbnail', env: WorkerEnv): Promise<string | null> {
+  const mediaSecret = secret(env, 'MEDIA_INTENT_SECRET');
+  if (!mediaSecret) return null;
+  const signature = await hmacSha256(mediaSecret, `${intent.intentId}.${intent.imageId}.${intent.propertyId}.${intent.revisionId}.${intent.expiresAt}.${intent.sizeBytes}.${intent.sha256}.${variant}`);
+  return [intent.intentId, intent.imageId, intent.propertyId, intent.revisionId, intent.expiresAt, intent.sizeBytes, intent.sha256, variant, signature].join('|');
+}
+
+async function verifyMediaToken(token: unknown, env: WorkerEnv): Promise<MediaTokenClaims | null> {
+  if (typeof token !== 'string') return null;
+  const parts = token.split('|');
+  if (parts.length !== 9) return null;
+  const [intentId, imageId, propertyId, revisionId, expiresAt, sizeBytesText, sha256Value, variant, signature] = parts;
+  const expiresAtMs = Date.parse(expiresAt ?? '');
+  const sizeBytes = Number(sizeBytesText);
+  const mediaSecret = secret(env, 'MEDIA_INTENT_SECRET');
+  if (!intentId || !imageId || !propertyId || !revisionId || !expiresAt || !sha256Value || !variant || !signature || !uuidPattern.test(intentId) || !uuidPattern.test(imageId) || !isIdentifier(propertyId) || !isIdentifier(revisionId) || !Number.isFinite(expiresAtMs) || expiresAtMs < Date.now() || !Number.isInteger(sizeBytes) || sizeBytes < 1 || sizeBytes > maxPropertyImageBytes || !/^[a-f0-9]{64}$/i.test(sha256Value) || (variant !== 'main' && variant !== 'thumbnail') || !mediaSecret) return null;
+  const expected = await hmacSha256(mediaSecret, `${intentId}.${imageId}.${propertyId}.${revisionId}.${expiresAt}.${sizeBytes}.${sha256Value.toLowerCase()}.${variant}`);
+  return await sameValue(signature, expected) ? { intentId, imageId, propertyId, revisionId, expiresAt, sizeBytes, sha256: sha256Value.toLowerCase(), variant } : null;
+}
+
+async function createMediaIntents(request: Request, env: WorkerEnv, fetchImplementation: FetchImplementation, propertyId: string): Promise<Response> {
+  const state = await authenticatedOpsMutation(request, env, fetchImplementation);
+  if (isResponse(state)) return state;
+  const current = state.snapshot.properties.find((property) => property.id === propertyId);
+  if (!current) return json({ ok: false, code: 'PROPERTY_NOT_FOUND' }, 404, request, env);
+  if (!canEditProperty(state.actor, current)) return forbidden('ASSIGNMENT_REQUIRED', request, env);
+  const input = await readBoundedJson(request);
+  if (!isRecord(input) || !isIdentifier(input.revisionId)) return badRequest('INVALID_MEDIA_INTENT', request, env);
+  const version = expectedVersion(input);
+  const files = parseIntentFiles(input.files);
+  if (!version || !files) return badRequest('INVALID_MEDIA_INTENT', request, env);
+  const mismatch = hasExpectedVersion(current, version, request, env);
+  if (mismatch) return mismatch;
+  const cms = await loadCmsPropertySnapshot(state.actor, propertyId, env, fetchImplementation);
+  if (!cms) return gatewayFailure(request, env);
+  if (cms.revision.id !== input.revisionId) return badRequest('REVISION_NOT_CURRENT', request, env);
+  const currentImageCount = cms.images.filter((image) => image.revisionId === input.revisionId && image.status !== 'rejected').length;
+  if (currentImageCount + files.length > 30) return badRequest('MEDIA_LIMIT_EXCEEDED', request, env);
+  const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+  const intents: CmsImageIntent[] = [];
+  for (const file of files) {
+    const intentId = crypto.randomUUID();
+    const imageId = crypto.randomUUID();
+    const intent: Omit<CmsImageIntent, 'uploadToken' | 'uploadUrl'> = { intentId, imageId, propertyId, revisionId: input.revisionId, objectKey: mediaUsesR2(env) ? privateMediaKey({ propertyId, revisionId: input.revisionId, imageId }) : `local/properties/${propertyId}/${input.revisionId}/${imageId}.webp`, expiresAt, sizeBytes: file.sizeBytes, sha256: file.sha256 };
+    const uploadToken = await mediaToken(intent, 'main', env);
+    const thumbnailUploadToken = await mediaToken(intent, 'thumbnail', env);
+    if (!uploadToken || !thumbnailUploadToken) return json({ ok: false, code: 'MEDIA_CONFIGURATION_REQUIRED' }, 503, request, env);
+    const uploadUrl = mediaUsesR2(env) ? new URL(`/v1/ops/media/intents/${intentId}/upload`, request.url) : null;
+    if (uploadUrl) uploadUrl.searchParams.set('token', uploadToken);
+    const thumbnailUploadUrl = mediaUsesR2(env) ? new URL(`/v1/ops/media/intents/${intentId}/upload`, request.url) : null;
+    if (thumbnailUploadUrl) thumbnailUploadUrl.searchParams.set('token', thumbnailUploadToken);
+    intents.push({ ...intent, uploadToken, uploadUrl: uploadUrl?.toString() ?? null, thumbnailUploadToken, thumbnailUploadUrl: thumbnailUploadUrl?.toString() ?? null } as CmsImageIntent);
+  }
+  return performCmsMutation({ eventId: crypto.randomUUID(), eventType: 'cms_media_intent', occurredAt: new Date().toISOString(), payload: { actor: state.actor, propertyId, revisionId: input.revisionId, expectedVersion: version, intents: intents.map((intent, index) => ({ ...intent, ...files[index] })) } }, request, env, fetchImplementation);
+}
+
+async function completeMediaIntent(request: Request, env: WorkerEnv, fetchImplementation: FetchImplementation, intentId: string): Promise<Response> {
+  const state = await authenticatedOpsMutation(request, env, fetchImplementation);
+  if (isResponse(state)) return state;
+  const input = await readBoundedJson(request);
+  if (!isRecord(input)) return badRequest('INVALID_MEDIA_COMPLETION', request, env);
+  const token = await verifyMediaToken(input.uploadToken, env);
+  const thumbnailToken = await verifyMediaToken(input.thumbnailUploadToken, env);
+  if (!token || !thumbnailToken || token.intentId !== intentId || token.variant !== 'main' || thumbnailToken.variant !== 'thumbnail' || thumbnailToken.intentId !== token.intentId || thumbnailToken.imageId !== token.imageId || thumbnailToken.sha256 !== token.sha256 || thumbnailToken.sizeBytes !== token.sizeBytes) return forbidden('INVALID_MEDIA_TOKEN', request, env);
+  const current = state.snapshot.properties.find((property) => property.id === token.propertyId);
+  if (!current) return json({ ok: false, code: 'PROPERTY_NOT_FOUND' }, 404, request, env);
+  if (!canEditProperty(state.actor, current)) return forbidden('ASSIGNMENT_REQUIRED', request, env);
+  const width = positiveNumber(input.width, 20_000);
+  const height = positiveNumber(input.height, 20_000);
+  const sizeBytes = positiveNumber(input.sizeBytes, maxPropertyImageBytes);
+  const sha256Value = typeof input.sha256 === 'string' && /^[a-f0-9]{64}$/i.test(input.sha256) ? input.sha256.toLowerCase() : null;
+  if (!width || !height || !sizeBytes || !sha256Value || input.mimeType !== 'image/webp' || sizeBytes !== token.sizeBytes || sha256Value !== token.sha256) return badRequest('INVALID_MEDIA_COMPLETION', request, env);
+  const bindings = mediaBindings(env);
+  if (bindings) {
+    const [head, thumbnailHead] = await Promise.all([bindings.privateMedia.head(privateMediaKey(token, 'main')), bindings.privateMedia.head(privateMediaKey(token, 'thumbnail'))]);
+    if (!head || !thumbnailHead || head.size !== token.sizeBytes || thumbnailHead.size < 1 || thumbnailHead.size > maxPropertyImageBytes || head.httpMetadata?.contentType !== 'image/webp' || thumbnailHead.httpMetadata?.contentType !== 'image/webp') return badRequest('MEDIA_UPLOAD_NOT_VERIFIED', request, env);
+  }
+  return performCmsMutation({ eventId: crypto.randomUUID(), eventType: 'cms_media_complete', occurredAt: new Date().toISOString(), payload: { actor: state.actor, propertyId: token.propertyId, revisionId: token.revisionId, intentId, imageId: token.imageId, width, height, sizeBytes, mimeType: 'image/webp', sha256: sha256Value, mode: mediaUsesR2(env) ? 'r2' : 'local-metadata' } }, request, env, fetchImplementation);
+}
+
+async function uploadMediaIntent(request: Request, env: WorkerEnv, fetchImplementation: FetchImplementation, intentId: string): Promise<Response> {
+  const bindings = mediaBindings(env);
+  if (!bindings) return json({ ok: false, code: 'MEDIA_UPLOAD_DISABLED' }, 503, request, env);
+  if (!hasTrustedOpsOrigin(request, env)) return forbidden('OPS_ORIGIN_REQUIRED', request, env);
+  const principal = await authenticatePrincipal(request, env);
+  if (!principal || !await hasValidCsrfToken(request, principal, env)) return forbidden('ACCESS_OR_CSRF_REQUIRED', request, env);
+  const claims = await verifyMediaToken(new URL(request.url).searchParams.get('token'), env);
+  if (!claims || claims.intentId !== intentId || request.headers.get('content-type')?.split(';')[0] !== 'image/webp') return forbidden('INVALID_MEDIA_TOKEN', request, env);
+  const length = Number(request.headers.get('content-length') ?? 0);
+  const hasExpectedLength = claims.variant === 'main'
+    ? length === claims.sizeBytes
+    : length > 0 && length <= maxPropertyImageBytes;
+  if (!Number.isInteger(length) || !hasExpectedLength || !request.body) return badRequest('INVALID_MEDIA_UPLOAD', request, env);
+  const state = await authenticatedSnapshot(request, env, fetchImplementation, principal);
+  if (isResponse(state)) return state;
+  const property = state.snapshot.properties.find((entry) => entry.id === claims.propertyId);
+  if (!property || !canEditProperty(state.actor, property)) return forbidden('ASSIGNMENT_REQUIRED', request, env);
+  await bindings.privateMedia.put(privateMediaKey(claims, claims.variant), request.body, { httpMetadata: { contentType: 'image/webp' }, customMetadata: { intentId: claims.intentId, sha256: claims.sha256, variant: claims.variant } });
+  return json({ ok: true, intentId, uploaded: true }, 201, request, env);
+}
+
+async function updateMedia(request: Request, env: WorkerEnv, fetchImplementation: FetchImplementation, propertyId: string): Promise<Response> {
+  const state = await authenticatedOpsMutation(request, env, fetchImplementation);
+  if (isResponse(state)) return state;
+  const current = state.snapshot.properties.find((property) => property.id === propertyId);
+  if (!current) return json({ ok: false, code: 'PROPERTY_NOT_FOUND' }, 404, request, env);
+  if (!canEditProperty(state.actor, current)) return forbidden('ASSIGNMENT_REQUIRED', request, env);
+  const input = await readBoundedJson(request);
+  const version = isRecord(input) ? expectedVersion(input) : null;
+  if (!isRecord(input) || !version || !Array.isArray(input.images) || input.images.length > 30) return badRequest('INVALID_MEDIA_UPDATE', request, env);
+  const mismatch = hasExpectedVersion(current, version, request, env);
+  if (mismatch) return mismatch;
+  const images = input.images.map((image) => isRecord(image) && isIdentifier(image.id) && imageCategorySet.has(image.category as PropertyImageCategory) && typeof image.isCover === 'boolean'
+    ? { id: image.id, category: image.category as PropertyImageCategory, alt: boundedText(image.alt, 3, 240), sortOrder: nonNegativeInteger(image.sortOrder, 10_000), isCover: image.isCover }
+    : null);
+  if (images.some((image) => !image || image.alt === null || image.sortOrder === null)) return badRequest('INVALID_MEDIA_UPDATE', request, env);
+  const normalizedImages = images as Array<{ id: string; category: PropertyImageCategory; alt: string; sortOrder: number; isCover: boolean }>;
+  if (normalizedImages.length > 0 && normalizedImages.filter((image) => image.isCover).length !== 1) return badRequest('COVER_IMAGE_REQUIRED', request, env);
+  if (new Set(normalizedImages.map((image) => image.id)).size !== normalizedImages.length || new Set(normalizedImages.map((image) => image.sortOrder)).size !== normalizedImages.length) return badRequest('DUPLICATE_MEDIA_ORDER', request, env);
+  return performCmsMutation({ eventId: crypto.randomUUID(), eventType: 'cms_media_update', occurredAt: new Date().toISOString(), payload: { actor: state.actor, propertyId, expectedVersion: version, images: normalizedImages } }, request, env, fetchImplementation);
+}
+
+async function submitProperty(request: Request, env: WorkerEnv, fetchImplementation: FetchImplementation, propertyId: string): Promise<Response> {
+  const state = await authenticatedOpsMutation(request, env, fetchImplementation);
+  if (isResponse(state)) return state;
+  const current = state.snapshot.properties.find((property) => property.id === propertyId);
+  if (!current) return json({ ok: false, code: 'PROPERTY_NOT_FOUND' }, 404, request, env);
+  if (!canEditProperty(state.actor, current)) return forbidden('ASSIGNMENT_REQUIRED', request, env);
+  const input = await readBoundedJson(request);
+  const version = isRecord(input) ? expectedVersion(input) : null;
+  if (!isRecord(input) || !version || input.photoAuthorizationConfirmed !== true) return badRequest('PHOTO_AUTHORIZATION_REQUIRED', request, env);
+  const mismatch = hasExpectedVersion(current, version, request, env);
+  if (mismatch) return mismatch;
+  const approvalIds = { publication: crypto.randomUUID(), photographs: crypto.randomUUID(), price: crypto.randomUUID() };
+  return performCmsMutation({ eventId: crypto.randomUUID(), eventType: 'cms_property_submit', occurredAt: new Date().toISOString(), payload: { actor: state.actor, propertyId, expectedVersion: version, approvalId: approvalIds.publication, approvalIds, photoAuthorizationConfirmed: true } }, request, env, fetchImplementation);
+}
+
+async function publishProperty(request: Request, env: WorkerEnv, fetchImplementation: FetchImplementation, propertyId: string): Promise<Response> {
+  const state = await authenticatedOpsMutation(request, env, fetchImplementation);
+  if (isResponse(state)) return state;
+  if (!canPublishProperty(state.actor)) return forbidden('ADMIN_REQUIRED', request, env);
+  const current = state.snapshot.properties.find((property) => property.id === propertyId);
+  if (!current) return json({ ok: false, code: 'PROPERTY_NOT_FOUND' }, 404, request, env);
+  if (current.publicationStatus !== 'approved' && current.publicationStatus !== 'publish_failed') return json({ ok: false, code: 'PROPERTY_NOT_APPROVED' }, 409, request, env);
+  const input = await readBoundedJson(request);
+  const version = isRecord(input) ? expectedVersion(input) : null;
+  if (!version) return badRequest('EXPECTED_VERSION_REQUIRED', request, env);
+  const mismatch = hasExpectedVersion(current, version, request, env);
+  if (mismatch) return mismatch;
+  const bindings = mediaBindings(env);
+  if (env.RUNTIME_ENV !== 'development' && !bindings) return json({ ok: false, code: 'R2_ACTIVATION_REQUIRED' }, 503, request, env);
+  const jobId = crypto.randomUUID();
+  const result = await performCmsMutation({ eventId: crypto.randomUUID(), eventType: 'cms_property_publish', occurredAt: new Date().toISOString(), payload: { actor: state.actor, propertyId, expectedVersion: version, jobId, mediaBaseUrl: env.MEDIA_PUBLIC_BASE_URL } }, request, env, fetchImplementation);
+  if (result.status !== 202) return result;
+  if (!bindings) {
+    if (await dispatchPublicationBuild(jobId, current.version + 1, env, fetchImplementation)) return result;
+    await sendGatewayEvent({ eventId: crypto.randomUUID(), eventType: 'cms_publication_callback', occurredAt: new Date().toISOString(), payload: { jobId, snapshotVersion: current.version + 1, status: 'failed', errorCode: 'BUILD_DISPATCH_DISABLED' } }, env, fetchImplementation);
+    return json({ ok: false, code: 'BUILD_DISPATCH_DISABLED', manualFollowUp: true }, 503, request, env);
+  }
+  const cms = await loadCmsPropertySnapshot(state.actor, propertyId, env, fetchImplementation);
+  if (!cms) {
+    await sendGatewayEvent({ eventId: crypto.randomUUID(), eventType: 'cms_publication_callback', occurredAt: new Date().toISOString(), payload: { jobId, snapshotVersion: current.version + 1, status: 'failed', errorCode: 'PUBLICATION_SNAPSHOT_UNAVAILABLE' } }, env, fetchImplementation);
+    return json({ ok: false, code: 'PUBLICATION_SNAPSHOT_UNAVAILABLE', manualFollowUp: true }, 503, request, env);
+  }
+  try {
+    await Promise.all(cms.images.filter((image) => image.revisionId === cms.revision.id && image.status === 'approved').map(async (image) => {
+      const object = await bindings.privateMedia.get(image.privateObjectKey);
+      if (!object) throw new Error('private_media_missing');
+      const publicKey = image.publicObjectKey ?? `public/${image.privateObjectKey}`;
+      const thumbnailKey = image.thumbnailObjectKey ?? `thumb/${image.privateObjectKey}`;
+      await bindings.publicMedia.put(publicKey, object.body, { httpMetadata: { contentType: 'image/webp', cacheControl: 'public, max-age=31536000, immutable' } });
+      const thumbnail = await bindings.privateMedia.get(image.privateObjectKey.replace(/\.webp$/, '-thumb.webp'));
+      if (!thumbnail) throw new Error('private_media_missing');
+      await bindings.publicMedia.put(thumbnailKey, thumbnail.body, { httpMetadata: { contentType: 'image/webp', cacheControl: 'public, max-age=31536000, immutable' } });
+    }));
+  } catch {
+    await sendGatewayEvent({ eventId: crypto.randomUUID(), eventType: 'cms_publication_callback', occurredAt: new Date().toISOString(), payload: { jobId, snapshotVersion: current.version + 1, status: 'failed', errorCode: 'MEDIA_COPY_FAILED' } }, env, fetchImplementation);
+    return json({ ok: false, code: 'MEDIA_COPY_FAILED', manualFollowUp: true }, 503, request, env);
+  }
+  if (!await dispatchPublicationBuild(jobId, current.version + 1, env, fetchImplementation)) {
+    await sendGatewayEvent({ eventId: crypto.randomUUID(), eventType: 'cms_publication_callback', occurredAt: new Date().toISOString(), payload: { jobId, snapshotVersion: current.version + 1, status: 'failed', errorCode: 'BUILD_DISPATCH_FAILED' } }, env, fetchImplementation);
+    return json({ ok: false, code: 'BUILD_DISPATCH_FAILED', manualFollowUp: true }, 503, request, env);
+  }
+  return result;
+}
+
+async function dispatchPublicationBuild(jobId: string, snapshotVersion: number, env: WorkerEnv, fetchImplementation: FetchImplementation): Promise<boolean> {
+  const token = secret(env, 'GITHUB_DISPATCH_TOKEN');
+  const repository = secret(env, 'GITHUB_REPOSITORY');
+  const workflow = secret(env, 'GITHUB_WORKFLOW');
+  const ref = secret(env, 'GITHUB_REF');
+  if (!token || !repository || !workflow || !ref || !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository) || !/^[A-Za-z0-9_.-]{1,160}$/.test(workflow)) return false;
+  try {
+    const response = await fetchImplementation(`https://api.github.com/repos/${repository}/actions/workflows/${encodeURIComponent(workflow)}/dispatches`, {
+      method: 'POST', headers: { authorization: `Bearer ${token}`, accept: 'application/vnd.github+json', 'content-type': 'application/json', 'user-agent': 'balo-pilot-api' },
+      body: JSON.stringify({ ref, inputs: { job_id: jobId, snapshot_version: String(snapshotVersion) } }),
+    });
+    return response.status === 204;
+  } catch { return false; }
+}
+
+async function changeAvailability(request: Request, env: WorkerEnv, fetchImplementation: FetchImplementation, propertyId: string): Promise<Response> {
+  const state = await authenticatedOpsMutation(request, env, fetchImplementation);
+  if (isResponse(state)) return state;
+  if (!canChangePropertyAvailability(state.actor)) return forbidden('ADMIN_REQUIRED', request, env);
+  const current = state.snapshot.properties.find((property) => property.id === propertyId);
+  if (!current) return json({ ok: false, code: 'PROPERTY_NOT_FOUND' }, 404, request, env);
+  const input = await readBoundedJson(request);
+  const version = isRecord(input) ? expectedVersion(input) : null;
+  const availabilityStatus = isRecord(input) && propertyAvailabilityStatusSet.has(input.availabilityStatus as PropertyAvailabilityStatus) ? input.availabilityStatus as PropertyAvailabilityStatus : null;
+  const reason = isRecord(input) ? boundedText(input.reason, 3, 500) : null;
+  const suppliedVerification = isRecord(input) && typeof input.lastVerifiedAt === 'string' ? Date.parse(input.lastVerifiedAt) : Number.NaN;
+  if (isRecord(input) && input.lastVerifiedAt !== undefined && (!Number.isFinite(suppliedVerification) || suppliedVerification > Date.now() + 5 * 60 * 1000)) return badRequest('INVALID_AVAILABILITY', request, env);
+  const lastVerifiedAt = Number.isFinite(suppliedVerification) && suppliedVerification <= Date.now() + 5 * 60 * 1000 ? new Date(suppliedVerification).toISOString() : new Date().toISOString();
+  if (!version || !availabilityStatus || !reason) return badRequest('INVALID_AVAILABILITY', request, env);
+  const mismatch = hasExpectedVersion(current, version, request, env);
+  if (mismatch) return mismatch;
+  const jobId = current.activeRevisionId ? crypto.randomUUID() : undefined;
+  const result = await performCmsMutation({ eventId: crypto.randomUUID(), eventType: 'cms_property_availability', occurredAt: new Date().toISOString(), payload: { actor: state.actor, propertyId, expectedVersion: version, availabilityStatus, lastVerifiedAt, reason, ...(jobId ? { jobId } : {}) } }, request, env, fetchImplementation);
+  if (result.status !== 202 || !jobId) return result;
+  if (await dispatchPublicationBuild(jobId, current.version + 1, env, fetchImplementation)) return result;
+  await sendGatewayEvent({ eventId: crypto.randomUUID(), eventType: 'cms_publication_callback', occurredAt: new Date().toISOString(), payload: { jobId, snapshotVersion: current.version + 1, status: 'failed', errorCode: 'AVAILABILITY_DISPATCH_FAILED' } }, env, fetchImplementation);
+  return json({ ok: false, code: 'AVAILABILITY_DISPATCH_FAILED', manualFollowUp: true }, 503, request, env);
+}
+
+async function publicationCallback(request: Request, env: WorkerEnv, fetchImplementation: FetchImplementation, jobId: string): Promise<Response> {
+  const callbackSecret = secret(env, 'BUILD_CALLBACK_SECRET');
+  const rawBody = await readBoundedText(request);
+  if (!callbackSecret) return json({ ok: false, code: 'CALLBACK_DISABLED' }, 503, request, env);
+  if (rawBody === null) return json({ ok: false, code: 'PAYLOAD_TOO_LARGE' }, 413, request, env);
+  const signature = (request.headers.get('x-balo-signature') ?? request.headers.get('x-balo-build-signature'))?.replace(/^sha256=/, '');
+  if (!signature || !await sameValue(signature, await hmacSha256(callbackSecret, rawBody))) return json({ ok: false, code: 'INVALID_CALLBACK_SIGNATURE' }, 401, request, env);
+  let input: unknown;
+  try { input = JSON.parse(rawBody) as unknown; } catch { return badRequest('INVALID_CALLBACK', request, env); }
+  if (!isRecord(input) || input.jobId !== jobId || !Number.isInteger(input.snapshotVersion) || (input.status !== 'running' && input.status !== 'succeeded' && input.status !== 'failed')) return badRequest('INVALID_CALLBACK', request, env);
+  const deploymentUrl = input.deploymentUrl === undefined ? undefined : optionalHttpsUrl(input.deploymentUrl);
+  const errorCode = input.errorCode === undefined ? undefined : boundedText(input.errorCode, 1, 120);
+  if ((input.deploymentUrl !== undefined && !deploymentUrl) || (input.errorCode !== undefined && !errorCode)) return badRequest('INVALID_CALLBACK', request, env);
+  const eventId = request.headers.get('idempotency-key') && uuidPattern.test(request.headers.get('idempotency-key') ?? '') ? request.headers.get('idempotency-key')! : `build_${await sha256(`${jobId}.${rawBody}`)}`;
+  return performCmsMutation({ eventId, eventType: 'cms_publication_callback', occurredAt: new Date().toISOString(), payload: { jobId, snapshotVersion: input.snapshotVersion, status: input.status, ...(deploymentUrl ? { deploymentUrl } : {}), ...(errorCode ? { errorCode } : {}) } }, request, env, fetchImplementation);
+}
+
+async function buildCatalog(request: Request, env: WorkerEnv, fetchImplementation: FetchImplementation, jobId: string): Promise<Response> {
+  const bearer = request.headers.get('authorization')?.match(/^Bearer\s+(.+)$/i)?.[1] ?? '';
+  const exportSecret = secret(env, 'BUILD_EXPORT_SECRET');
+  if (!exportSecret || !bearer || !await sameValue(bearer, exportSecret)) return json({ ok: false, code: 'BUILD_AUTH_REQUIRED' }, 401, request, env);
+  const snapshot = await loadCmsJobSnapshot(jobId, env, fetchImplementation);
+  if (!snapshot || snapshot.publicationJob.status !== 'queued') return json({ ok: false, code: 'PUBLICATION_JOB_NOT_AVAILABLE' }, 404, request, env);
+  const properties = snapshot.catalogEntries.flatMap((entry) => {
+    const freshness = propertyAvailabilityFreshness(entry.property.lastVerifiedAt);
+    if (freshness !== 'fresh' && freshness !== 'warning') return [];
+    const catalog = toCatalogProperty(entry.property, entry.revision, entry.images, env.MEDIA_PUBLIC_BASE_URL, entry.publicationTarget);
+    return catalog ? [catalog] : [];
+  });
+  const exportPayload: CatalogExport = { snapshotVersion: snapshot.publicationJob.snapshotVersion, generatedAt: new Date().toISOString(), properties };
+  return json({ ok: true, data: exportPayload }, 200, request, env);
+}
+
+async function buildSnapshot(request: Request, env: WorkerEnv, fetchImplementation: FetchImplementation, propertyId: string): Promise<Response> {
+  const state = await authenticatedSnapshot(request, env, fetchImplementation);
+  if (isResponse(state)) return state;
+  if (!canPublishProperty(state.actor)) return forbidden('ADMIN_REQUIRED', request, env);
+  if (!state.snapshot.properties.some((property) => property.id === propertyId)) return json({ ok: false, code: 'PROPERTY_NOT_FOUND' }, 404, request, env);
+  const cms = await loadCmsPropertySnapshot(state.actor, propertyId, env, fetchImplementation);
+  if (!cms) return gatewayFailure(request, env);
+  const freshness = propertyAvailabilityFreshness(cms.property.lastVerifiedAt);
+  const catalog = freshness === 'fresh' || freshness === 'warning' ? toCatalogProperty(cms.property, cms.revision, cms.images, env.MEDIA_PUBLIC_BASE_URL) : null;
+  return json({ ok: true, data: { propertyId, snapshotVersion: cms.property.version, freshness, ...(catalog ? { catalog } : {}) } }, 200, request, env);
+}
+
+async function publicMedia(request: Request, env: WorkerEnv, objectKey: string): Promise<Response> {
+  const bindings = mediaBindings(env);
+  if (!bindings || !objectKey || objectKey.split('/').some((part) => !part || part === '.' || part === '..')) return json({ ok: false, code: 'NOT_FOUND' }, 404, request, env);
+  const object = await bindings.publicMedia.get(objectKey);
+  if (!object) return json({ ok: false, code: 'NOT_FOUND' }, 404, request, env);
+  const headers = new Headers({
+    'cache-control': object.httpMetadata?.cacheControl ?? 'public, max-age=31536000, immutable',
+    'content-type': object.httpMetadata?.contentType ?? 'application/octet-stream',
+    'x-content-type-options': 'nosniff',
+  });
+  if (object.httpEtag) headers.set('etag', object.httpEtag);
+  return new Response(object.body, { status: 200, headers });
+}
+
+async function availabilitySweep(env: WorkerEnv, fetchImplementation: FetchImplementation): Promise<void> {
+  const jobId = crypto.randomUUID();
+  const response = await sendGatewayEvent({ eventId: crypto.randomUUID(), eventType: 'cms_availability_sweep', occurredAt: new Date().toISOString(), payload: { action: 'daily_availability_sweep', jobId } }, env, fetchImplementation);
+  if (!response?.ok) return;
+  let result: unknown;
+  try { result = await response.json() as unknown; } catch { return; }
+  if (!isRecord(result) || !isRecord(result.data)) return;
+  const publicationJob = parsePublicationJob(result.data.publicationJob);
+  if (!publicationJob) return;
+  if (await dispatchPublicationBuild(publicationJob.id, publicationJob.snapshotVersion, env, fetchImplementation)) return;
+  await sendGatewayEvent({ eventId: crypto.randomUUID(), eventType: 'cms_publication_callback', occurredAt: new Date().toISOString(), payload: { jobId: publicationJob.id, snapshotVersion: publicationJob.snapshotVersion, status: 'failed', errorCode: 'AVAILABILITY_SWEEP_DISPATCH_FAILED' } }, env, fetchImplementation);
+}
+
 export async function handleRequest(request: Request, env: WorkerEnv, fetchImplementation: FetchImplementation = fetch): Promise<Response> {
   const url = new URL(request.url);
   if (request.method === 'OPTIONS') return json({}, 204, request, env);
   if (url.pathname === '/health' && request.method === 'GET') return json({ ok: true, service: 'balo-pilot-api' }, 200, request, env);
   if (url.pathname === '/v1/public/owner-enquiries' && request.method === 'POST') return publicEnquiry(request, env, fetchImplementation);
   if (url.pathname === '/v1/webhooks/meta' && request.method === 'POST') return metaWebhook(request, env, fetchImplementation);
+  const publicMediaPath = /^\/v1\/public\/media\/(.+)$/.exec(url.pathname);
+  if (publicMediaPath && request.method === 'GET') return publicMedia(request, env, publicMediaPath[1] ?? '');
   if (url.pathname === '/v1/ops/csrf' && request.method === 'GET') return opsCsrf(request, env);
   if (url.pathname === '/v1/ops/dashboard' && request.method === 'GET') return opsDashboard(request, env, fetchImplementation);
   if (url.pathname === '/v1/ops/leads' && request.method === 'GET') return opsLeads(request, env, fetchImplementation);
+  if (url.pathname === '/v1/ops/properties' && request.method === 'GET') return cmsProperties(request, env, fetchImplementation);
+  if (url.pathname === '/v1/ops/properties' && request.method === 'POST') return createProperty(request, env, fetchImplementation);
   const leadIdForAssignment = recordIdFromPath(url.pathname, 'assign');
   if (leadIdForAssignment && request.method === 'POST') return assignLead(request, env, fetchImplementation, leadIdForAssignment);
   const leadIdForActivity = recordIdFromPath(url.pathname, 'activities');
@@ -639,11 +1269,40 @@ export async function handleRequest(request: Request, env: WorkerEnv, fetchImple
   if (url.pathname === '/v1/ops/approvals' && request.method === 'POST') return requestApproval(request, env, fetchImplementation);
   const decision = /^\/v1\/ops\/approvals\/([A-Za-z0-9_-]{1,120})\/decision$/.exec(url.pathname);
   if (decision && request.method === 'POST') return decideApproval(request, env, fetchImplementation, decision[1] ?? '');
+  const mediaComplete = /^\/v1\/ops\/media\/intents\/([0-9a-f-]{36})\/complete$/i.exec(url.pathname);
+  if (mediaComplete && request.method === 'POST') return completeMediaIntent(request, env, fetchImplementation, mediaComplete[1] ?? '');
+  const mediaUpload = /^\/v1\/ops\/media\/intents\/([0-9a-f-]{36})\/upload$/i.exec(url.pathname);
+  if (mediaUpload && request.method === 'PUT') return uploadMediaIntent(request, env, fetchImplementation, mediaUpload[1] ?? '');
+  const property = propertyIdFromPath(url.pathname);
+  if (property && request.method === 'GET') return cmsProperty(request, env, fetchImplementation, property);
+  if (property && request.method === 'PUT') return updateProperty(request, env, fetchImplementation, property);
+  const mediaIntentsProperty = propertyIdFromPath(url.pathname, 'media/intents');
+  if (mediaIntentsProperty && request.method === 'POST') return createMediaIntents(request, env, fetchImplementation, mediaIntentsProperty);
+  const mediaProperty = propertyIdFromPath(url.pathname, 'media');
+  if (mediaProperty && request.method === 'PATCH') return updateMedia(request, env, fetchImplementation, mediaProperty);
+  if (mediaProperty && request.method === 'PUT') return updateMedia(request, env, fetchImplementation, mediaProperty);
+  const submitPropertyId = propertyIdFromPath(url.pathname, 'submit');
+  if (submitPropertyId && request.method === 'POST') return submitProperty(request, env, fetchImplementation, submitPropertyId);
+  const publishPropertyId = propertyIdFromPath(url.pathname, 'publish');
+  if (publishPropertyId && request.method === 'POST') return publishProperty(request, env, fetchImplementation, publishPropertyId);
+  const availabilityPropertyId = propertyIdFromPath(url.pathname, 'availability');
+  if (availabilityPropertyId && request.method === 'POST') return changeAvailability(request, env, fetchImplementation, availabilityPropertyId);
+  const buildPropertyId = propertyIdFromPath(url.pathname, 'build-snapshot');
+  if (buildPropertyId && request.method === 'GET') return buildSnapshot(request, env, fetchImplementation, buildPropertyId);
+  const buildCatalogRoute = /^\/v1\/build\/catalog\/([0-9a-f-]{36})$/i.exec(url.pathname);
+  if (buildCatalogRoute && request.method === 'GET') return buildCatalog(request, env, fetchImplementation, buildCatalogRoute[1] ?? '');
+  const buildResultRoute = /^\/v1\/build\/catalog\/([0-9a-f-]{36})\/result$/i.exec(url.pathname);
+  if (buildResultRoute && request.method === 'POST') return publicationCallback(request, env, fetchImplementation, buildResultRoute[1] ?? '');
+  const callback = /^\/v1\/internal\/publication-jobs\/([0-9a-f-]{36})\/callback$/i.exec(url.pathname);
+  if (callback && request.method === 'POST') return publicationCallback(request, env, fetchImplementation, callback[1] ?? '');
   return json({ ok: false, code: 'NOT_FOUND' }, 404, request, env);
 }
 
 export default {
   fetch(request, env) {
     return handleRequest(request, env);
+  },
+  scheduled(_controller, env, ctx) {
+    ctx.waitUntil(availabilitySweep(env, fetch));
   },
 } satisfies ExportedHandler<Env>;

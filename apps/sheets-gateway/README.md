@@ -17,7 +17,9 @@ web comercial.
    de *staging* a la URL de Orlando.
 
 El gateway crea las hojas operativas si faltan: `Usuarios`, `Leads`,
-`Inmuebles`, `Actividades`, `Aprobaciones`, `Auditoria` y `Eventos de canal`.
+`Inmuebles`, `Versiones Inmueble`, `Imagenes`, `Publicaciones`,
+`Trabajos Publicacion`, `Actividades`, `Aprobaciones`, `Auditoria` y
+`Eventos de canal`.
 El Worker envía un único sobre JSON con `{ timestamp, signature, event }`; la
 firma HMAC cubre una serialización determinista de la marca y del evento. No se
 aceptan firma, identificador ni marca de tiempo por URL o cabecera. El
@@ -29,6 +31,11 @@ Antes de operar, Orlando crea las filas activas de `Usuarios` con `id`, nombre,
 correo, rol (`admin` o `user`) y estado `active`. El identificador debe
 corresponder al sujeto de Cloudflare Access o el correo al correo autenticado.
 Las fórmulas introducidas como datos se neutralizan antes de guardarse en Sheets.
+
+Las imágenes no se guardan en Sheets: solo se registran metadatos, claves de
+objeto aleatorias, estado y orden. El gateway vuelve a comprobar el máximo de
+30 imágenes por revisión, 12 MB por variante principal y la caducidad de cinco
+minutos aunque el portal ya los haya validado.
 
 No se incluye `appsscript.json` desplegable ni un ID de script: estos recursos
 deben pertenecer a la cuenta del cliente.
