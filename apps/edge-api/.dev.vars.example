@@ -2,3 +2,9 @@
 # GATEWAY_URL=https://script.google.com/macros/s/ORLANDO_DEPLOYMENT_ID/exec
 # GATEWAY_HMAC_SECRET=un-secreto-unico-y-largo
 # TURNSTILE_SECRET=clave-privada-de-turnstile
+# CSRF_SECRET=otro-secreto-unico-y-largo
+# MEDIA_INTENT_SECRET=secreto-para-intents-de-cinco-minutos
+# BUILD_EXPORT_SECRET=secreto-compartido-con-CATALOG_EXPORT_SECRET-en-GitHub
+# BUILD_CALLBACK_SECRET=secreto-compartido-con-CATALOG_CALLBACK_HMAC_SECRET-en-GitHub
+# GITHUB_DISPATCH_TOKEN=token-fine-grained-de-Orlando-limitado-a-Actions-del-repo
+# META_APP_SECRET=solo-cuando-Orlando-active-el-conector-oficial

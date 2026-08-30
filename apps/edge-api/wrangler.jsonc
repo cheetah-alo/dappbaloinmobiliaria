@@ -9,12 +9,24 @@
     "enabled": true,
     "head_sampling_rate": 1
   },
-  "secrets": {
-    "required": ["CSRF_SECRET", "GATEWAY_HMAC_SECRET", "GATEWAY_URL", "TURNSTILE_SECRET"]
+  "triggers": {
+    "crons": ["13 3 * * *"]
   },
+  "secrets": {
+    "required": ["BUILD_CALLBACK_SECRET", "BUILD_EXPORT_SECRET", "CSRF_SECRET", "GATEWAY_HMAC_SECRET", "GATEWAY_URL", "GITHUB_DISPATCH_TOKEN", "MEDIA_INTENT_SECRET", "TURNSTILE_SECRET"]
+  },
+  "r2_buckets": [
+    { "binding": "PRIVATE_MEDIA", "bucket_name": "balo-private-media" },
+    { "binding": "PUBLIC_MEDIA", "bucket_name": "balo-public-media" }
+  ],
   "vars": {
     "ALLOWED_ORIGIN": "http://localhost:5173",
     "ALLOW_TEST_BYPASS": "false",
+    "MEDIA_BACKEND": "local",
+    "MEDIA_PUBLIC_BASE_URL": "http://localhost:8787/v1/public/media",
+    "GITHUB_REPOSITORY": "",
+    "GITHUB_WORKFLOW": "",
+    "GITHUB_REF": "dev",
     "OPS_ALLOWED_ORIGIN": "http://localhost:5174",
     "POLICY_AUD": "",
     "RUNTIME_ENV": "development",
@@ -24,11 +36,20 @@
     "staging": {
       "name": "balo-pilot-api-staging",
       "secrets": {
-        "required": ["CSRF_SECRET", "GATEWAY_HMAC_SECRET", "GATEWAY_URL", "TURNSTILE_SECRET"]
+        "required": ["BUILD_CALLBACK_SECRET", "BUILD_EXPORT_SECRET", "CSRF_SECRET", "GATEWAY_HMAC_SECRET", "GATEWAY_URL", "GITHUB_DISPATCH_TOKEN", "MEDIA_INTENT_SECRET", "TURNSTILE_SECRET"]
       },
+      "r2_buckets": [
+        { "binding": "PRIVATE_MEDIA", "bucket_name": "balo-private-media-staging" },
+        { "binding": "PUBLIC_MEDIA", "bucket_name": "balo-public-media-staging" }
+      ],
       "vars": {
         "ALLOWED_ORIGIN": "https://staging.example.invalid",
         "ALLOW_TEST_BYPASS": "false",
+        "MEDIA_BACKEND": "local",
+        "MEDIA_PUBLIC_BASE_URL": "https://staging.example.invalid/v1/public/media",
+        "GITHUB_REPOSITORY": "",
+        "GITHUB_WORKFLOW": "",
+        "GITHUB_REF": "dev",
         "OPS_ALLOWED_ORIGIN": "https://ops.staging.example.invalid",
         "POLICY_AUD": "",
         "RUNTIME_ENV": "staging",
@@ -38,11 +59,20 @@
     "production": {
       "name": "balo-pilot-api-production",
       "secrets": {
-        "required": ["CSRF_SECRET", "GATEWAY_HMAC_SECRET", "GATEWAY_URL", "TURNSTILE_SECRET"]
+        "required": ["BUILD_CALLBACK_SECRET", "BUILD_EXPORT_SECRET", "CSRF_SECRET", "GATEWAY_HMAC_SECRET", "GATEWAY_URL", "GITHUB_DISPATCH_TOKEN", "MEDIA_INTENT_SECRET", "TURNSTILE_SECRET"]
       },
+      "r2_buckets": [
+        { "binding": "PRIVATE_MEDIA", "bucket_name": "balo-private-media" },
+        { "binding": "PUBLIC_MEDIA", "bucket_name": "balo-public-media" }
+      ],
       "vars": {
         "ALLOWED_ORIGIN": "https://example.invalid",
         "ALLOW_TEST_BYPASS": "false",
+        "MEDIA_BACKEND": "local",
+        "MEDIA_PUBLIC_BASE_URL": "https://example.invalid/v1/public/media",
+        "GITHUB_REPOSITORY": "",
+        "GITHUB_WORKFLOW": "",
+        "GITHUB_REF": "main",
         "OPS_ALLOWED_ORIGIN": "https://ops.example.invalid",
         "POLICY_AUD": "",
         "RUNTIME_ENV": "production",

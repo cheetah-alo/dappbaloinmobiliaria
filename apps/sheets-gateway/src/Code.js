@@ -1,14 +1,19 @@
 /* global ContentService, LockService, PropertiesService, SpreadsheetApp, Utilities */
 
 var CLOCK_SKEW_MS = 5 * 60 * 1000;
+var MAX_ENVELOPE_BYTES = 256 * 1024;
+var MAX_PROPERTY_IMAGE_BYTES = 12 * 1024 * 1024;
 var ID_PATTERN = /^[A-Za-z0-9_-]{1,120}$/;
+var UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 var OPS_EVENT_TYPES = ['ops_snapshot', 'ops_assignment', 'ops_activity', 'ops_approval_request', 'ops_approval_decision'];
+var CMS_EVENT_TYPES = ['cms_property_snapshot', 'cms_publication_job_snapshot', 'cms_property_create', 'cms_property_update', 'cms_media_intent', 'cms_media_complete', 'cms_media_update', 'cms_property_submit', 'cms_property_publish', 'cms_property_availability', 'cms_publication_callback', 'cms_availability_sweep'];
 var ACTIVITY_TYPES = ['lead_created', 'lead_assigned', 'post_published', 'visit_scheduled', 'visit_completed', 'offer_received', 'approval_requested', 'approval_decided', 'manual_follow_up'];
-var APPROVAL_KINDS = ['price', 'publication', 'commission', 'discount', 'closure'];
+var APPROVAL_KINDS = ['price', 'publication', 'photographs', 'commission', 'discount', 'closure'];
+var PROPERTY_STATUSES = ['draft', 'pending_review', 'approved', 'publishing', 'published', 'publish_failed', 'paused'];
+var AVAILABILITY_STATUSES = ['available', 'reserved', 'sold', 'rented', 'withdrawn'];
+var IMAGE_CATEGORIES = ['cover', 'balcony', 'living', 'kitchen', 'bedroom', 'bathroom', 'study', 'laundry', 'parking', 'building', 'other'];
 
-function doGet() {
-  return response_({ ok: true, service: 'balo-sheets-gateway' });
-}
+function doGet() { return response_({ ok: true, service: 'balo-sheets-gateway' }); }
 
 function doPost(event) {
   var lock = LockService.getScriptLock();
@@ -17,39 +22,27 @@ function doPost(event) {
     var rawBody = event && event.postData ? event.postData.contents : '';
     var validation = validateEnvelope_(rawBody);
     if (!validation.ok) return response_(validation);
-
     var spreadsheet = SpreadsheetApp.openById(requiredProperty_('SPREADSHEET_ID'));
     if (validation.event.eventType === 'ops_snapshot') return response_(snapshotResponse_(spreadsheet, validation.event));
-
+    if (validation.event.eventType === 'cms_property_snapshot') return response_(cmsSnapshotResponse_(spreadsheet, validation.event));
+    if (validation.event.eventType === 'cms_publication_job_snapshot') return response_(cmsJobSnapshotResponse_(spreadsheet, validation.event));
     var audit = auditSheet_(spreadsheet);
-    if (eventExists_(audit, validation.event.eventId)) {
-      return response_({ ok: true, eventId: validation.event.eventId, deduplicated: true });
-    }
-
+    if (eventExists_(audit, validation.event.eventId)) return response_({ ok: true, eventId: validation.event.eventId, deduplicated: true });
     var result = recordEvent_(spreadsheet, validation.event);
-    if (!result.ok) return response_(result);
+    if (!result.ok) { result.eventId = validation.event.eventId; return response_(result); }
     appendRow_(audit, [validation.event.eventId, validation.event.eventType, validation.event.occurredAt, new Date().toISOString(), 'recorded', sourceFor_(validation.event)]);
-    return response_({ ok: true, eventId: validation.event.eventId, deduplicated: false, approvalId: result.approvalId || undefined });
+    return response_({ ok: true, eventId: validation.event.eventId, deduplicated: false, approvalId: result.approvalId || undefined, data: result.data || {} });
   } catch (_error) {
-    // Do not write incoming payloads, personal data, or credentials to logs.
+    // Never log signed envelopes, private details, photos, contact data, or credentials.
     console.error(JSON.stringify({ event: 'gateway_failure' }));
     return response_({ ok: false, code: 'GATEWAY_ERROR' });
-  } finally {
-    if (lock.hasLock()) lock.releaseLock();
-  }
+  } finally { if (lock.hasLock()) lock.releaseLock(); }
 }
 
 function validateEnvelope_(rawBody) {
-  if (!rawBody) return { ok: false, code: 'EMPTY_BODY' };
-  var envelope;
-  try {
-    envelope = JSON.parse(rawBody);
-  } catch (_error) {
-    return { ok: false, code: 'INVALID_JSON' };
-  }
-  if (!isObject_(envelope) || typeof envelope.timestamp !== 'string' || typeof envelope.signature !== 'string' || !isObject_(envelope.event)) {
-    return { ok: false, code: 'INVALID_ENVELOPE' };
-  }
+  if (!rawBody || rawBody.length > MAX_ENVELOPE_BYTES) return { ok: false, code: rawBody ? 'PAYLOAD_TOO_LARGE' : 'EMPTY_BODY' };
+  var envelope; try { envelope = JSON.parse(rawBody); } catch (_error) { return { ok: false, code: 'INVALID_JSON' }; }
+  if (!isObject_(envelope) || typeof envelope.timestamp !== 'string' || typeof envelope.signature !== 'string' || !isObject_(envelope.event)) return { ok: false, code: 'INVALID_ENVELOPE' };
   var timestampMs = Date.parse(envelope.timestamp);
   if (!isFinite(timestampMs) || Math.abs(Date.now() - timestampMs) > CLOCK_SKEW_MS) return { ok: false, code: 'INVALID_REQUEST_WINDOW' };
   if (!validEvent_(envelope.event)) return { ok: false, code: 'INVALID_EVENT' };
@@ -57,306 +50,249 @@ function validateEnvelope_(rawBody) {
   if (!constantTimeEquals_(expected, envelope.signature)) return { ok: false, code: 'INVALID_SIGNATURE' };
   return { ok: true, event: envelope.event };
 }
-
-function validEvent_(event) {
-  if (!isIdentifier_(event.eventId) || typeof event.eventType !== 'string' || typeof event.occurredAt !== 'string' || !isObject_(event.payload)) return false;
-  return event.eventType === 'owner_enquiry' || event.eventType === 'channel_webhook' || OPS_EVENT_TYPES.indexOf(event.eventType) !== -1;
-}
-
-function canonicalJson_(value) {
-  if (value === null || typeof value === 'boolean' || typeof value === 'string') return JSON.stringify(value);
-  if (typeof value === 'number') {
-    if (!isFinite(value)) throw new Error('Cannot sign non-finite number');
-    return JSON.stringify(value);
-  }
-  if (Array.isArray(value)) return '[' + value.map(canonicalJson_).join(',') + ']';
-  if (isObject_(value)) {
-    return '{' + Object.keys(value).sort().map(function (key) {
-      return JSON.stringify(key) + ':' + canonicalJson_(value[key]);
-    }).join(',') + '}';
-  }
-  throw new Error('Unsupported signed value');
-}
+function validEvent_(event) { return isIdentifier_(event.eventId) && typeof event.eventType === 'string' && typeof event.occurredAt === 'string' && validIso_(event.occurredAt) && isObject_(event.payload) && (event.eventType === 'owner_enquiry' || event.eventType === 'channel_webhook' || OPS_EVENT_TYPES.indexOf(event.eventType) !== -1 || CMS_EVENT_TYPES.indexOf(event.eventType) !== -1); }
+function canonicalJson_(value) { if (value === null || typeof value === 'boolean' || typeof value === 'string') return JSON.stringify(value); if (typeof value === 'number') { if (!isFinite(value)) throw new Error('Cannot sign non-finite number'); return JSON.stringify(value); } if (Array.isArray(value)) return '[' + value.map(canonicalJson_).join(',') + ']'; if (isObject_(value)) return '{' + Object.keys(value).sort().map(function (key) { return JSON.stringify(key) + ':' + canonicalJson_(value[key]); }).join(',') + '}'; throw new Error('Unsupported signed value'); }
 
 function recordEvent_(spreadsheet, event) {
   if (event.eventType === 'owner_enquiry') return recordOwnerEnquiry_(spreadsheet, event);
-  if (event.eventType === 'channel_webhook') {
-    appendRow_(sheet_(spreadsheet, 'Eventos de canal', ['event_id', 'received_at', 'provider', 'event_type', 'status']), [event.eventId, new Date().toISOString(), event.payload.provider || 'unknown', event.eventType, 'received']);
-    return { ok: true };
-  }
-  return recordOpsEvent_(spreadsheet, event);
+  if (event.eventType === 'channel_webhook') { appendRow_(sheet_(spreadsheet, 'Eventos de canal', ['event_id', 'received_at', 'provider', 'event_type', 'status']), [event.eventId, new Date().toISOString(), event.payload.provider || 'unknown', event.eventType, 'received']); return { ok: true }; }
+  return OPS_EVENT_TYPES.indexOf(event.eventType) !== -1 ? recordOpsEvent_(spreadsheet, event) : recordCmsEvent_(spreadsheet, event);
 }
-
-function recordOwnerEnquiry_(spreadsheet, event) {
-  var lead = event.payload;
-  if (!validOwnerEnquiry_(lead)) return { ok: false, code: 'INVALID_OWNER_ENQUIRY' };
-  appendRow_(leadsSheet_(spreadsheet), [
-    event.eventId, new Date().toISOString(), lead.name, lead.phone, lead.email || '', lead.operation, lead.district, event.occurredAt,
-    sourceFor_(event), lead.attribution.utmSource || '', lead.attribution.utmCampaign || '', lead.attribution.qrId || '', lead.attribution.postId || '', '', 'new'
-  ]);
-  appendActivity_(spreadsheet, event.eventId, 'lead_created', event.eventId, '', event.occurredAt, { source: sourceFor_(event) });
-  return { ok: true };
-}
-
-function validOwnerEnquiry_(lead) {
-  if (!isObject_(lead) || !validText_(lead.name, 2, 120) || !validText_(lead.phone, 7, 40) || String(lead.phone).replace(/\D/g, '').length < 7 || !validText_(lead.district, 2, 120) || lead.consent !== true || ['sell', 'rent', 'buy', 'invest'].indexOf(lead.operation) === -1 || !validAttribution_(lead.attribution)) return false;
-  return !lead.email || validText_(lead.email, 1, 254);
-}
-
-function validAttribution_(attribution) {
-  if (!isObject_(attribution) || ['website', 'whatsapp', 'instagram', 'portal', 'manual'].indexOf(attribution.source) === -1) return false;
-  return ['utmSource', 'utmCampaign', 'qrId', 'postId'].every(function (key) {
-    return !attribution[key] || validText_(attribution[key], 1, 120);
-  });
-}
+function recordOwnerEnquiry_(spreadsheet, event) { var lead = event.payload; if (!validOwnerEnquiry_(lead)) return { ok: false, code: 'INVALID_OWNER_ENQUIRY' }; appendRow_(leadsSheet_(spreadsheet), [event.eventId, new Date().toISOString(), lead.name, lead.phone, lead.email || '', lead.operation, lead.district, event.occurredAt, sourceFor_(event), lead.attribution.utmSource || '', lead.attribution.utmCampaign || '', lead.attribution.qrId || '', lead.attribution.postId || '', '', 'new']); appendActivity_(spreadsheet, event.eventId, 'lead_created', event.eventId, '', event.occurredAt, { source: sourceFor_(event) }); return { ok: true }; }
+function validOwnerEnquiry_(lead) { return isObject_(lead) && validText_(lead.name, 2, 120) && validText_(lead.phone, 7, 40) && String(lead.phone).replace(/\D/g, '').length >= 7 && validText_(lead.district, 2, 120) && lead.consent === true && ['sell', 'rent', 'buy', 'invest'].indexOf(lead.operation) !== -1 && validAttribution_(lead.attribution) && (!lead.email || validText_(lead.email, 1, 254)); }
+function validAttribution_(attribution) { return isObject_(attribution) && ['website', 'whatsapp', 'instagram', 'portal', 'manual'].indexOf(attribution.source) !== -1 && ['utmSource', 'utmCampaign', 'qrId', 'postId'].every(function (key) { return !attribution[key] || validText_(attribution[key], 1, 120); }); }
 
 function recordOpsEvent_(spreadsheet, event) {
-  var actor = resolvedActor_(spreadsheet, event.payload.actor);
-  if (!actor) return { ok: false, code: 'ACTOR_NOT_AUTHORIZED' };
+  var actor = resolvedActor_(spreadsheet, event.payload.actor); if (!actor) return { ok: false, code: 'ACTOR_NOT_AUTHORIZED' };
   if (event.eventType === 'ops_assignment') return recordAssignment_(spreadsheet, event, actor);
   if (event.eventType === 'ops_activity') return recordActivity_(spreadsheet, event, actor);
   if (event.eventType === 'ops_approval_request') return recordApprovalRequest_(spreadsheet, event, actor);
   if (event.eventType === 'ops_approval_decision') return recordApprovalDecision_(spreadsheet, event, actor);
   return { ok: false, code: 'UNSUPPORTED_OPERATION' };
 }
+function recordAssignment_(spreadsheet, event, actor) { if (actor.role !== 'admin' || !isIdentifier_(event.payload.leadId) || !isIdentifier_(event.payload.assigneeId) || !activeActorById_(spreadsheet, event.payload.assigneeId)) return { ok: false, code: 'INVALID_ASSIGNMENT' }; var lead = findRowById_(leadsSheet_(spreadsheet), event.payload.leadId); if (!lead) return { ok: false, code: 'LEAD_NOT_FOUND' }; setRowValue_(lead, 'assigned_to', event.payload.assigneeId); appendActivity_(spreadsheet, event.eventId, 'lead_assigned', event.payload.leadId, actor.id, event.occurredAt, { assigneeId: event.payload.assigneeId }); return { ok: true }; }
+function recordActivity_(spreadsheet, event, actor) { if (!isIdentifier_(event.payload.leadId) || ACTIVITY_TYPES.indexOf(event.payload.activityType) === -1 || !validMetadata_(event.payload.metadata)) return { ok: false, code: 'INVALID_ACTIVITY' }; var lead = findRowById_(leadsSheet_(spreadsheet), event.payload.leadId); if (!lead) return { ok: false, code: 'LEAD_NOT_FOUND' }; if (actor.role !== 'admin' && lead.values[lead.columns.assigned_to - 1] !== actor.id) return { ok: false, code: 'ASSIGNMENT_REQUIRED' }; appendActivity_(spreadsheet, event.eventId, event.payload.activityType, event.payload.leadId, actor.id, event.occurredAt, event.payload.metadata); return { ok: true }; }
+function recordApprovalRequest_(spreadsheet, event, actor) { if (!isIdentifier_(event.payload.approvalId) || !isIdentifier_(event.payload.recordId) || APPROVAL_KINDS.indexOf(event.payload.kind) === -1 || !validText_(event.payload.rationale, 3, 1000)) return { ok: false, code: 'INVALID_APPROVAL_REQUEST' }; var record = recordById_(spreadsheet, event.payload.recordId); if (!record || (actor.role !== 'admin' && record.assigneeId !== actor.id)) return { ok: false, code: 'ASSIGNMENT_REQUIRED' }; appendRow_(approvalsSheet_(spreadsheet), [event.payload.approvalId, event.payload.kind, event.payload.recordId, actor.id, 'pending', '', '', event.payload.rationale, '']); appendActivityForRecord_(spreadsheet, event.eventId, 'approval_requested', record, actor.id, event.occurredAt, { approvalId: event.payload.approvalId, kind: event.payload.kind }); return { ok: true, approvalId: event.payload.approvalId }; }
+function recordApprovalDecision_(spreadsheet, event, actor) { if (actor.role !== 'admin' || !isIdentifier_(event.payload.approvalId) || ['approved', 'rejected'].indexOf(event.payload.decision) === -1 || !validText_(event.payload.reason, 3, 1000)) return { ok: false, code: 'INVALID_APPROVAL_DECISION' }; var approval = findRowById_(approvalsSheet_(spreadsheet), event.payload.approvalId); if (!approval || approval.values[approval.columns.status - 1] !== 'pending') return { ok: false, code: 'APPROVAL_NOT_PENDING' }; var record = recordById_(spreadsheet, String(approval.values[approval.columns.record_id - 1] || '')); if (!record) return { ok: false, code: 'APPROVAL_RECORD_NOT_FOUND' }; setRowValue_(approval, 'status', event.payload.decision); setRowValue_(approval, 'approved_by', actor.id); setRowValue_(approval, 'approved_at', new Date().toISOString()); setRowValue_(approval, 'decision_reason', event.payload.reason); if (record.propertyId) { var propertyRow = findRowById_(propertiesSheet_(spreadsheet), record.propertyId); var property = propertyRow ? propertyFromRow_(propertyRow) : null; var revision = property ? revisionById_(spreadsheet, property.draftRevisionId) : null; if (property && revision && property.publicationStatus === 'pending_review') { var belongsToRevision = [revision.publicationApprovalId, revision.photoApprovalId, revision.priceApprovalId].indexOf(event.payload.approvalId) !== -1; if (belongsToRevision && event.payload.decision === 'rejected') { property.publicationStatus = 'draft'; property.version += 1; property.updatedAt = event.occurredAt; writeProperty_(propertyRow, property); } else if (belongsToRevision && validForPublish_(spreadsheet, property, revision)) { property.publicationStatus = 'approved'; property.version += 1; property.updatedAt = event.occurredAt; writeProperty_(propertyRow, property); } } } appendActivityForRecord_(spreadsheet, event.eventId, 'approval_decided', record, actor.id, event.occurredAt, { approvalId: event.payload.approvalId, decision: event.payload.decision }); return { ok: true }; }
 
-function recordAssignment_(spreadsheet, event, actor) {
-  if (actor.role !== 'admin' || !isIdentifier_(event.payload.leadId) || !isIdentifier_(event.payload.assigneeId) || !activeActorById_(spreadsheet, event.payload.assigneeId)) return { ok: false, code: 'INVALID_ASSIGNMENT' };
-  var lead = findRowById_(leadsSheet_(spreadsheet), event.payload.leadId);
-  if (!lead) return { ok: false, code: 'LEAD_NOT_FOUND' };
-  lead.sheet.getRange(lead.row, lead.columns.assigned_to).setValue(safeCell_(event.payload.assigneeId));
-  appendActivity_(spreadsheet, event.eventId, 'lead_assigned', event.payload.leadId, actor.id, event.occurredAt, { assigneeId: event.payload.assigneeId });
-  return { ok: true };
+function recordCmsEvent_(spreadsheet, event) {
+  var actor = event.eventType === 'cms_publication_callback' ? null : resolvedActor_(spreadsheet, event.payload.actor);
+  if (event.eventType !== 'cms_publication_callback' && event.eventType !== 'cms_availability_sweep' && !actor) return { ok: false, code: 'ACTOR_NOT_AUTHORIZED' };
+  if (event.eventType === 'cms_property_create') return cmsCreateProperty_(spreadsheet, event, actor);
+  if (event.eventType === 'cms_property_update') return cmsUpdateProperty_(spreadsheet, event, actor);
+  if (event.eventType === 'cms_media_intent') return cmsMediaIntentV2_(spreadsheet, event, actor);
+  if (event.eventType === 'cms_media_complete') return cmsMediaComplete_(spreadsheet, event, actor);
+  if (event.eventType === 'cms_media_update') return cmsMediaUpdate_(spreadsheet, event, actor);
+  if (event.eventType === 'cms_property_submit') return cmsSubmitV2_(spreadsheet, event, actor);
+  if (event.eventType === 'cms_property_publish') return cmsPublish_(spreadsheet, event, actor);
+  if (event.eventType === 'cms_property_availability') return cmsAvailabilityV2_(spreadsheet, event, actor);
+  if (event.eventType === 'cms_publication_callback') return cmsPublicationCallbackV2_(spreadsheet, event);
+  if (event.eventType === 'cms_availability_sweep') return cmsAvailabilitySweep_(spreadsheet, event);
+  return { ok: false, code: 'UNSUPPORTED_OPERATION' };
 }
 
-function recordActivity_(spreadsheet, event, actor) {
-  if (!isIdentifier_(event.payload.leadId) || ACTIVITY_TYPES.indexOf(event.payload.activityType) === -1 || !validMetadata_(event.payload.metadata)) return { ok: false, code: 'INVALID_ACTIVITY' };
-  var lead = findRowById_(leadsSheet_(spreadsheet), event.payload.leadId);
-  if (!lead) return { ok: false, code: 'LEAD_NOT_FOUND' };
-  if (actor.role !== 'admin' && lead.values[lead.columns.assigned_to - 1] !== actor.id) return { ok: false, code: 'ASSIGNMENT_REQUIRED' };
-  appendActivity_(spreadsheet, event.eventId, event.payload.activityType, event.payload.leadId, actor.id, event.occurredAt, event.payload.metadata);
-  return { ok: true };
+function cmsSubmitV2_(spreadsheet, event, actor) {
+  if (!isIdentifier_(event.payload.propertyId) || !validExpectedVersion_(event.payload.expectedVersion) || event.payload.photoAuthorizationConfirmed !== true || !isObject_(event.payload.approvalIds)) return { ok: false, code: 'INVALID_SUBMISSION' };
+  var ids = event.payload.approvalIds;
+  if (!UUID_PATTERN.test(String(ids.publication || '')) || !UUID_PATTERN.test(String(ids.photographs || '')) || !UUID_PATTERN.test(String(ids.price || ''))) return { ok: false, code: 'INVALID_SUBMISSION' };
+  var propertyRow = findRowById_(propertiesSheet_(spreadsheet), event.payload.propertyId);
+  if (!propertyRow) return { ok: false, code: 'PROPERTY_NOT_FOUND' };
+  var property = propertyFromRow_(propertyRow);
+  if (property.version !== event.payload.expectedVersion) return { ok: false, code: 'VERSION_CONFLICT', currentVersion: property.version };
+  if (actor.role !== 'admin' && property.assigneeId !== actor.id) return { ok: false, code: 'ASSIGNMENT_REQUIRED' };
+  var revision = revisionById_(spreadsheet, property.draftRevisionId);
+  if (!revision) return { ok: false, code: 'REVISION_NOT_FOUND' };
+  revision.photoAuthorizationConfirmedBy = actor.id;
+  revision.photoAuthorizationConfirmedAt = event.occurredAt;
+  revision.publicationApprovalId = ids.publication;
+  revision.photoApprovalId = ids.photographs;
+  if (revision.priceVisibility === 'public') revision.priceApprovalId = ids.price;
+  revision.updatedAt = event.occurredAt;
+  appendApproval_(spreadsheet, ids.publication, 'publication', property.id, actor.id, 'Publicación del inmueble');
+  appendApproval_(spreadsheet, ids.photographs, 'photographs', property.id, actor.id, 'Autorización de fotografías');
+  if (revision.priceVisibility === 'public') appendApproval_(spreadsheet, ids.price, 'price', property.id, actor.id, 'Precio público');
+  replaceRevision_(spreadsheet, revision);
+  property.publicationStatus = 'pending_review'; property.version += 1; property.updatedAt = event.occurredAt; writeProperty_(propertyRow, property);
+  appendActivityForRecord_(spreadsheet, event.eventId, 'approval_requested', { propertyId: property.id }, actor.id, event.occurredAt, { approvalId: ids.publication, kind: 'publication' });
+  return { ok: true, approvalId: ids.publication, data: { property: property, revision: revision, approvalIds: ids } };
 }
 
-function recordApprovalRequest_(spreadsheet, event, actor) {
-  if (!isIdentifier_(event.payload.approvalId) || !isIdentifier_(event.payload.recordId) || APPROVAL_KINDS.indexOf(event.payload.kind) === -1 || !validText_(event.payload.rationale, 3, 1000)) return { ok: false, code: 'INVALID_APPROVAL_REQUEST' };
-  var record = recordById_(spreadsheet, event.payload.recordId);
-  if (!record || (actor.role !== 'admin' && record.assigneeId !== actor.id)) return { ok: false, code: 'ASSIGNMENT_REQUIRED' };
-  appendRow_(approvalsSheet_(spreadsheet), [event.payload.approvalId, event.payload.kind, event.payload.recordId, actor.id, 'pending', '', '', event.payload.rationale, '']);
-  appendActivityForRecord_(spreadsheet, event.eventId, 'approval_requested', record, actor.id, event.occurredAt, { approvalId: event.payload.approvalId, kind: event.payload.kind });
-  return { ok: true, approvalId: event.payload.approvalId };
+function cmsPublicationCallbackV2_(spreadsheet, event) {
+  if (!UUID_PATTERN.test(String(event.payload.jobId || '')) || !validExpectedVersion_(event.payload.snapshotVersion) || ['running', 'succeeded', 'failed'].indexOf(event.payload.status) === -1) return { ok: false, code: 'INVALID_CALLBACK' };
+  var jobRow = findRowById_(publicationJobsSheet_(spreadsheet), event.payload.jobId);
+  if (!jobRow) return { ok: false, code: 'PUBLICATION_JOB_NOT_FOUND' };
+  var job = jobFromRow_(jobRow);
+  if (job.snapshotVersion !== event.payload.snapshotVersion || (job.status !== 'queued' && job.status !== 'running')) return { ok: false, code: 'STALE_PUBLICATION_JOB' };
+  var propertyRow = findRowById_(propertiesSheet_(spreadsheet), job.propertyId); var property = propertyRow ? propertyFromRow_(propertyRow) : null;
+  if (!property || property.version !== job.snapshotVersion) return { ok: false, code: 'STALE_PUBLICATION_SNAPSHOT' };
+  job.status = event.payload.status;
+  if (event.payload.status === 'succeeded' || event.payload.status === 'failed') job.completedAt = event.occurredAt;
+  if (validHttpsUrl_(event.payload.deploymentUrl)) job.deploymentUrl = event.payload.deploymentUrl;
+  if (validText_(event.payload.errorCode, 1, 120)) job.errorCode = event.payload.errorCode;
+  writeJob_(jobRow, job);
+  var publicationRow = findRowById_(publicationsSheet_(spreadsheet), job.id); if (publicationRow) { setRowValue_(publicationRow, 'status', job.status); if (job.status === 'succeeded') setRowValue_(publicationRow, 'published_at', event.occurredAt); }
+  var wasPaused = property.publicationStatus === 'paused'; property.publicationStatus = job.status === 'succeeded' ? (wasPaused ? 'paused' : 'published') : job.status === 'failed' ? 'publish_failed' : 'publishing'; if (job.status === 'succeeded' && !wasPaused) property.activeRevisionId = job.revisionId; property.updatedAt = event.occurredAt; writeProperty_(propertyRow, property);
+  return { ok: true, data: { publicationJob: job, property: property } };
 }
 
-function recordApprovalDecision_(spreadsheet, event, actor) {
-  if (actor.role !== 'admin' || !isIdentifier_(event.payload.approvalId) || ['approved', 'rejected'].indexOf(event.payload.decision) === -1 || !validText_(event.payload.reason, 3, 1000)) return { ok: false, code: 'INVALID_APPROVAL_DECISION' };
-  var approval = findRowById_(approvalsSheet_(spreadsheet), event.payload.approvalId);
-  if (!approval || approval.values[approval.columns.status - 1] !== 'pending') return { ok: false, code: 'APPROVAL_NOT_PENDING' };
-  var record = recordById_(spreadsheet, String(approval.values[approval.columns.record_id - 1] || ''));
-  if (!record) return { ok: false, code: 'APPROVAL_RECORD_NOT_FOUND' };
-  approval.sheet.getRange(approval.row, approval.columns.status).setValue(event.payload.decision);
-  approval.sheet.getRange(approval.row, approval.columns.approved_by).setValue(safeCell_(actor.id));
-  approval.sheet.getRange(approval.row, approval.columns.approved_at).setValue(new Date().toISOString());
-  approval.sheet.getRange(approval.row, approval.columns.decision_reason).setValue(safeCell_(event.payload.reason));
-  appendActivityForRecord_(spreadsheet, event.eventId, 'approval_decided', record, actor.id, event.occurredAt, { approvalId: event.payload.approvalId, decision: event.payload.decision });
-  return { ok: true };
+function cmsAvailabilityV2_(spreadsheet, event, actor) {
+  if (hasActivePublicationJob_(spreadsheet)) return { ok: false, code: 'CATALOG_BUILD_IN_PROGRESS' };
+  var currentRow = isIdentifier_(event.payload.propertyId) ? findRowById_(propertiesSheet_(spreadsheet), event.payload.propertyId) : null;
+  if (currentRow && propertyFromRow_(currentRow).activeRevisionId && !UUID_PATTERN.test(String(event.payload.jobId || ''))) return { ok: false, code: 'AVAILABILITY_JOB_REQUIRED' };
+  var result = cmsAvailability_(spreadsheet, event, actor);
+  if (!result.ok || !result.data || !result.data.property) return result;
+  var property = result.data.property;
+  if (!property.activeRevisionId) return result;
+  var jobId = UUID_PATTERN.test(String(event.payload.jobId || '')) ? event.payload.jobId : null;
+  if (!jobId) return { ok: false, code: 'AVAILABILITY_JOB_REQUIRED' };
+  var job = { id: jobId, propertyId: property.id, revisionId: property.activeRevisionId, requestedBy: actor.id, status: 'queued', snapshotVersion: property.version, requestedAt: event.occurredAt };
+  appendPublication_(spreadsheet, { id: job.id, propertyId: property.id, revisionId: property.activeRevisionId, snapshotVersion: property.version, publicationApprovalId: '', status: 'queued', catalogJson: '', publishedAt: '' });
+  appendJob_(spreadsheet, job);
+  result.data.publicationJob = job;
+  return result;
 }
 
-function snapshotResponse_(spreadsheet, event) {
-  var actor = resolvedActor_(spreadsheet, event.payload.actor);
-  if (!actor) return { ok: false, code: 'ACTOR_NOT_AUTHORIZED' };
-  var allLeads = readLeads_(leadsSheet_(spreadsheet));
-  var allProperties = readProperties_(propertiesSheet_(spreadsheet));
-  var leads = actor.role === 'admin' ? allLeads : allLeads.filter(function (lead) { return lead.assigneeId === actor.id; });
-  var properties = actor.role === 'admin' ? allProperties : allProperties.filter(function (property) { return property.assigneeId === actor.id; });
-  var leadIds = leads.map(function (lead) { return lead.id; });
-  var propertyIds = properties.map(function (property) { return property.id; });
-  var activities = readActivities_(activitiesSheet_(spreadsheet)).filter(function (activity) {
-    return actor.role === 'admin' || (activity.leadId && leadIds.indexOf(activity.leadId) !== -1) || (activity.propertyId && propertyIds.indexOf(activity.propertyId) !== -1);
+function cmsMediaIntentV2_(spreadsheet, event, actor) {
+  if (!Array.isArray(event.payload.intents)) return { ok: false, code: 'INVALID_MEDIA_INTENT' };
+  var normalized = { eventId: event.eventId, eventType: event.eventType, occurredAt: event.occurredAt, payload: {} };
+  Object.keys(event.payload).forEach(function (key) { normalized.payload[key] = event.payload[key]; });
+  normalized.payload.intents = event.payload.intents.map(function (intent) {
+    var copy = {}; if (!isObject_(intent)) return copy; Object.keys(intent).forEach(function (key) { copy[key] = intent[key]; });
+    if (typeof copy.objectKey === 'string' && copy.objectKey.indexOf('properties/') === 0) copy.objectKey = 'local/' + copy.objectKey;
+    return copy;
   });
-  var approvals = readApprovals_(approvalsSheet_(spreadsheet)).filter(function (approval) {
-    return actor.role === 'admin' || leadIds.indexOf(approval.recordId) !== -1 || propertyIds.indexOf(approval.recordId) !== -1;
+  var result = cmsMediaIntent_(spreadsheet, normalized, actor);
+  if (!result.ok || !result.data || !Array.isArray(result.data.intents)) return result;
+  result.data.intents.forEach(function (intent) {
+    var original = event.payload.intents.find(function (candidate) { return candidate.intentId === intent.intentId; });
+    if (original) {
+      var row = findRowById_(imagesSheet_(spreadsheet), intent.imageId);
+      if (row) setRowValue_(row, 'private_object_key', original.objectKey);
+      intent.uploadUrl = typeof original.uploadUrl === 'string' ? original.uploadUrl : null; intent.thumbnailUploadUrl = typeof original.thumbnailUploadUrl === 'string' ? original.thumbnailUploadUrl : null; intent.uploadToken = original.uploadToken; intent.thumbnailUploadToken = original.thumbnailUploadToken; intent.objectKey = original.objectKey; intent.mode = typeof original.uploadUrl === 'string' ? 'r2-proxy' : 'local-metadata';
+    }
   });
-  return { ok: true, actor: actor, leads: leads, properties: properties, activities: activities, approvals: approvals, users: actor.role === 'admin' ? readUsers_(usersSheet_(spreadsheet)) : [] };
+  return result;
 }
+function cmsCreateProperty_(spreadsheet, event, actor) { var property = event.payload.property; var revision = event.payload.revision; if (!validCmsProperty_(property) || !validRevision_(revision) || property.id !== revision.propertyId || revision.revision !== 1 || (actor.role !== 'admin' && property.assigneeId !== actor.id) || !activeActorById_(spreadsheet, property.assigneeId)) return { ok: false, code: 'INVALID_PROPERTY' }; if (findRowById_(propertiesSheet_(spreadsheet), property.id)) return { ok: false, code: 'PROPERTY_EXISTS' }; appendProperty_(spreadsheet, property); appendRevision_(spreadsheet, revision); appendActivityForRecord_(spreadsheet, event.eventId, 'manual_follow_up', { propertyId: property.id }, actor.id, event.occurredAt, { action: 'property_created' }); return { ok: true, data: { property: property, revision: revision, images: [], publicationJobs: [] } }; }
+function cmsUpdateProperty_(spreadsheet, event, actor) { var property = event.payload.property; var revision = event.payload.revision; var existing = validCmsProperty_(property) ? findRowById_(propertiesSheet_(spreadsheet), property.id) : null; if (!existing || !validRevision_(revision) || revision.propertyId !== property.id || !validExpectedVersion_(event.payload.expectedVersion)) return { ok: false, code: 'INVALID_PROPERTY_UPDATE' }; var current = propertyFromRow_(existing); if (current.version !== event.payload.expectedVersion) return { ok: false, code: 'VERSION_CONFLICT', currentVersion: current.version }; if (current.publicationStatus === 'publishing') return { ok: false, code: 'PUBLICATION_IN_PROGRESS' }; if (actor.role !== 'admin' && current.assigneeId !== actor.id) return { ok: false, code: 'ASSIGNMENT_REQUIRED' }; if (actor.role !== 'admin' && property.assigneeId !== current.assigneeId) return { ok: false, code: 'ASSIGNMENT_REQUIRED' }; property.version = current.version + 1; property.publicationStatus = 'draft'; property.createdAt = current.createdAt; property.updatedAt = event.occurredAt; property.draftRevisionId = revision.id; revision.revision = property.version; revision.createdBy = actor.id; revision.createdAt = event.occurredAt; revision.updatedAt = event.occurredAt; writeProperty_(existing, property); appendRevision_(spreadsheet, revision); appendActivityForRecord_(spreadsheet, event.eventId, 'manual_follow_up', { propertyId: property.id }, actor.id, event.occurredAt, { action: 'property_updated' }); return { ok: true, data: { property: property, revision: revision } }; }
+function cmsMediaIntent_(spreadsheet, event, actor) { if (!isIdentifier_(event.payload.propertyId) || !isIdentifier_(event.payload.revisionId) || !validExpectedVersion_(event.payload.expectedVersion) || !Array.isArray(event.payload.intents) || event.payload.intents.length < 1 || event.payload.intents.length > 30) return { ok: false, code: 'INVALID_MEDIA_INTENT' }; var propertyRow = findRowById_(propertiesSheet_(spreadsheet), event.payload.propertyId); if (!propertyRow) return { ok: false, code: 'PROPERTY_NOT_FOUND' }; var property = propertyFromRow_(propertyRow); if (property.version !== event.payload.expectedVersion) return { ok: false, code: 'VERSION_CONFLICT', currentVersion: property.version }; if (actor.role !== 'admin' && property.assigneeId !== actor.id) return { ok: false, code: 'ASSIGNMENT_REQUIRED' }; var existingImages = readImages_(imagesSheet_(spreadsheet)).filter(function (image) { return image.propertyId === property.id && image.revisionId === event.payload.revisionId && image.status !== 'rejected'; }); var existingIds = existingImages.map(function (image) { return image.id; }); var newIds = event.payload.intents.map(function (intent) { return intent.imageId; }); if (existingImages.length + event.payload.intents.length > 30 || newIds.some(function (id, index) { return existingIds.indexOf(id) !== -1 || newIds.indexOf(id) !== index; })) return { ok: false, code: 'MEDIA_LIMIT_EXCEEDED' }; if (!revisionById_(spreadsheet, event.payload.revisionId) || event.payload.intents.some(function (intent) { return !validIntent_(intent, property, event.payload.revisionId); })) return { ok: false, code: 'INVALID_MEDIA_INTENT' }; event.payload.intents.forEach(function (intent) { appendImage_(spreadsheet, intent, 'uploading', ''); }); return { ok: true, data: { intents: event.payload.intents.map(function (intent) { return { intentId: intent.intentId, imageId: intent.imageId, uploadUrl: null, thumbnailUploadUrl: null, expiresAt: intent.expiresAt, uploadToken: intent.uploadToken, thumbnailUploadToken: intent.thumbnailUploadToken, objectKey: intent.objectKey, mode: 'local-metadata' }; }) } }; }
+function cmsMediaComplete_(spreadsheet, event, actor) { if (!isIdentifier_(event.payload.propertyId) || !isIdentifier_(event.payload.revisionId) || !UUID_PATTERN.test(String(event.payload.intentId || '')) || !UUID_PATTERN.test(String(event.payload.imageId || '')) || event.payload.mimeType !== 'image/webp' || !validPositive_(event.payload.width, 20000) || !validPositive_(event.payload.height, 20000) || !validPositive_(event.payload.sizeBytes, MAX_PROPERTY_IMAGE_BYTES) || !/^[a-f0-9]{64}$/i.test(String(event.payload.sha256 || ''))) return { ok: false, code: 'INVALID_MEDIA_COMPLETION' }; var propertyRow = findRowById_(propertiesSheet_(spreadsheet), event.payload.propertyId); var image = findRowById_(imagesSheet_(spreadsheet), event.payload.imageId); if (!propertyRow || !image || String(image.values[image.columns.intent_id - 1] || '') !== event.payload.intentId || String(image.values[image.columns.status - 1] || '') !== 'uploading') return { ok: false, code: 'MEDIA_INTENT_NOT_FOUND' }; var property = propertyFromRow_(propertyRow); if (actor.role !== 'admin' && property.assigneeId !== actor.id) return { ok: false, code: 'ASSIGNMENT_REQUIRED' }; if (Date.parse(String(image.values[image.columns.expires_at - 1] || '')) < Date.now()) return { ok: false, code: 'MEDIA_INTENT_EXPIRED' }; setRowValue_(image, 'width', event.payload.width); setRowValue_(image, 'height', event.payload.height); setRowValue_(image, 'size_bytes', event.payload.sizeBytes); setRowValue_(image, 'mime_type', 'image/webp'); setRowValue_(image, 'sha256', event.payload.sha256); setRowValue_(image, 'status', 'uploaded'); setRowValue_(image, 'uploaded_at', event.occurredAt); return { ok: true, data: { image: imageFromRow_(findRowById_(imagesSheet_(spreadsheet), event.payload.imageId)) } }; }
+function cmsMediaUpdate_(spreadsheet, event, actor) { if (!isIdentifier_(event.payload.propertyId) || !validExpectedVersion_(event.payload.expectedVersion) || !Array.isArray(event.payload.images) || event.payload.images.length > 30) return { ok: false, code: 'INVALID_MEDIA_UPDATE' }; var propertyRow = findRowById_(propertiesSheet_(spreadsheet), event.payload.propertyId); if (!propertyRow) return { ok: false, code: 'PROPERTY_NOT_FOUND' }; var property = propertyFromRow_(propertyRow); if (property.version !== event.payload.expectedVersion) return { ok: false, code: 'VERSION_CONFLICT', currentVersion: property.version }; if (actor.role !== 'admin' && property.assigneeId !== actor.id) return { ok: false, code: 'ASSIGNMENT_REQUIRED' }; var images = event.payload.images; var currentImages = readImages_(imagesSheet_(spreadsheet)).filter(function (image) { return image.propertyId === property.id && image.revisionId === property.draftRevisionId && image.status !== 'rejected'; }); if (images.length !== currentImages.length) return { ok: false, code: 'INCOMPLETE_MEDIA_UPDATE' }; var seenCover = 0; var seenIds = {}; var seenOrders = {}; for (var index = 0; index < images.length; index += 1) { var change = images[index]; var row = isObject_(change) && isIdentifier_(change.id) ? findRowById_(imagesSheet_(spreadsheet), change.id) : null; if (!row || String(row.values[row.columns.property_id - 1]) !== property.id || String(row.values[row.columns.revision_id - 1]) !== property.draftRevisionId || IMAGE_CATEGORIES.indexOf(change.category) === -1 || !validText_(change.alt, 3, 240) || !validNonNegativeInt_(change.sortOrder, 10000) || typeof change.isCover !== 'boolean' || seenIds[change.id] || seenOrders[change.sortOrder]) return { ok: false, code: 'INVALID_MEDIA_UPDATE' }; seenIds[change.id] = true; seenOrders[change.sortOrder] = true; if (change.isCover) seenCover += 1; } if (images.length > 0 && seenCover !== 1) return { ok: false, code: 'COVER_IMAGE_REQUIRED' }; images.forEach(function (change) { var row = findRowById_(imagesSheet_(spreadsheet), change.id); setRowValue_(row, 'category', change.category); setRowValue_(row, 'alt', change.alt); setRowValue_(row, 'sort_order', change.sortOrder); setRowValue_(row, 'is_cover', change.isCover); }); property.version += 1; property.updatedAt = event.occurredAt; writeProperty_(propertyRow, property); return { ok: true, data: { property: property, images: readImages_(imagesSheet_(spreadsheet)).filter(function (image) { return image.propertyId === property.id; }) } }; }
+function cmsSubmit_(spreadsheet, event, actor) { if (!isIdentifier_(event.payload.propertyId) || !validExpectedVersion_(event.payload.expectedVersion) || !UUID_PATTERN.test(String(event.payload.approvalId || ''))) return { ok: false, code: 'INVALID_SUBMISSION' }; var propertyRow = findRowById_(propertiesSheet_(spreadsheet), event.payload.propertyId); if (!propertyRow) return { ok: false, code: 'PROPERTY_NOT_FOUND' }; var property = propertyFromRow_(propertyRow); if (property.version !== event.payload.expectedVersion) return { ok: false, code: 'VERSION_CONFLICT', currentVersion: property.version }; if (actor.role !== 'admin' && property.assigneeId !== actor.id) return { ok: false, code: 'ASSIGNMENT_REQUIRED' }; var revision = revisionById_(spreadsheet, property.draftRevisionId); if (!revision || !revision.photoAuthorizationConfirmedBy || !revision.photoAuthorizationConfirmedAt) return { ok: false, code: 'PHOTO_AUTHORIZATION_REQUIRED' }; var ids = isObject_(event.payload.approvalIds) ? event.payload.approvalIds : { publication: event.payload.approvalId }; if (!UUID_PATTERN.test(String(ids.publication || ''))) return { ok: false, code: 'INVALID_SUBMISSION' }; var approvalIds = { publication: ids.publication, photographs: UUID_PATTERN.test(String(ids.photographs || '')) ? ids.photographs : ids.publication, price: ids.price }; if (revision.priceVisibility === 'public' && !UUID_PATTERN.test(String(approvalIds.price || ''))) return { ok: false, code: 'PRICE_APPROVAL_REQUIRED' }; appendApproval_(spreadsheet, approvalIds.publication, 'publication', property.id, actor.id, 'Publicación del inmueble'); appendApproval_(spreadsheet, approvalIds.photographs, 'photographs', property.id, actor.id, 'Autorización de fotografías'); if (revision.priceVisibility === 'public') appendApproval_(spreadsheet, approvalIds.price, 'price', property.id, actor.id, 'Precio público'); revision.publicationApprovalId = approvalIds.publication; revision.photoApprovalId = approvalIds.photographs; if (revision.priceVisibility === 'public') revision.priceApprovalId = approvalIds.price; revision.updatedAt = event.occurredAt; replaceRevision_(spreadsheet, revision); property.publicationStatus = 'pending_review'; property.version += 1; property.updatedAt = event.occurredAt; writeProperty_(propertyRow, property); appendActivityForRecord_(spreadsheet, event.eventId, 'approval_requested', { propertyId: property.id }, actor.id, event.occurredAt, { approvalId: approvalIds.publication, kind: 'publication' }); return { ok: true, approvalId: approvalIds.publication, data: { property: property, revision: revision, approvalIds: approvalIds } }; }
+function cmsPublish_(spreadsheet, event, actor) { if (actor.role !== 'admin' || !isIdentifier_(event.payload.propertyId) || !validExpectedVersion_(event.payload.expectedVersion) || !UUID_PATTERN.test(String(event.payload.jobId || ''))) return { ok: false, code: 'INVALID_PUBLISH' }; if (hasActivePublicationJob_(spreadsheet)) return { ok: false, code: 'CATALOG_BUILD_IN_PROGRESS' }; var propertyRow = findRowById_(propertiesSheet_(spreadsheet), event.payload.propertyId); if (!propertyRow) return { ok: false, code: 'PROPERTY_NOT_FOUND' }; var property = propertyFromRow_(propertyRow); if (property.version !== event.payload.expectedVersion) return { ok: false, code: 'VERSION_CONFLICT', currentVersion: property.version }; if (property.publicationStatus !== 'approved' && property.publicationStatus !== 'publish_failed') return { ok: false, code: 'PROPERTY_NOT_APPROVED' }; var revision = revisionById_(spreadsheet, property.draftRevisionId); if (!revision || !validForPublish_(spreadsheet, property, revision)) return { ok: false, code: 'PUBLISH_APPROVAL_REQUIRED' }; var images = readImages_(imagesSheet_(spreadsheet)).filter(function (image) { return image.propertyId === property.id && image.revisionId === revision.id; }); if (images.length < 1 || images.length > 30 || images.filter(function (image) { return image.isCover && image.status === 'uploaded'; }).length !== 1 || images.some(function (image) { return image.status !== 'uploaded'; })) return { ok: false, code: 'COVER_IMAGE_REQUIRED' }; images.forEach(function (image) { var row = findRowById_(imagesSheet_(spreadsheet), image.id); setRowValue_(row, 'status', 'approved'); setRowValue_(row, 'public_object_key', 'public/' + image.privateObjectKey); setRowValue_(row, 'thumbnail_object_key', 'thumb/' + image.privateObjectKey); }); property.publicationStatus = 'publishing'; property.version += 1; property.updatedAt = event.occurredAt; writeProperty_(propertyRow, property); var job = { id: event.payload.jobId, propertyId: property.id, revisionId: revision.id, requestedBy: actor.id, status: 'queued', snapshotVersion: property.version, requestedAt: event.occurredAt }; appendPublication_(spreadsheet, { id: event.payload.jobId, propertyId: property.id, revisionId: revision.id, snapshotVersion: property.version, publicationApprovalId: revision.publicationApprovalId, status: 'queued', catalogJson: '', publishedAt: '' }); appendJob_(spreadsheet, job); appendActivityForRecord_(spreadsheet, event.eventId, 'post_published', { propertyId: property.id }, actor.id, event.occurredAt, { jobId: job.id, state: 'queued' }); return { ok: true, data: { property: property, revision: revision, publicationJob: job, buildSnapshot: { snapshotVersion: property.version, propertyId: property.id } } }; }
+function cmsAvailability_(spreadsheet, event, actor) { if (actor.role !== 'admin' || !isIdentifier_(event.payload.propertyId) || !validExpectedVersion_(event.payload.expectedVersion) || AVAILABILITY_STATUSES.indexOf(event.payload.availabilityStatus) === -1 || !validIso_(event.payload.lastVerifiedAt) || !validText_(event.payload.reason, 3, 500)) return { ok: false, code: 'INVALID_AVAILABILITY' }; var row = findRowById_(propertiesSheet_(spreadsheet), event.payload.propertyId); if (!row) return { ok: false, code: 'PROPERTY_NOT_FOUND' }; var property = propertyFromRow_(row); if (property.version !== event.payload.expectedVersion) return { ok: false, code: 'VERSION_CONFLICT', currentVersion: property.version }; property.availabilityStatus = event.payload.availabilityStatus; property.lastVerifiedAt = event.payload.lastVerifiedAt; property.version += 1; property.updatedAt = event.occurredAt; writeProperty_(row, property); appendActivityForRecord_(spreadsheet, event.eventId, 'manual_follow_up', { propertyId: property.id }, actor.id, event.occurredAt, { action: 'availability_changed', availabilityStatus: event.payload.availabilityStatus, reason: event.payload.reason }); return { ok: true, data: { property: property } }; }
+function cmsPublicationCallback_(spreadsheet, event) { if (!UUID_PATTERN.test(String(event.payload.jobId || '')) || ['running', 'succeeded', 'failed'].indexOf(event.payload.status) === -1) return { ok: false, code: 'INVALID_CALLBACK' }; var jobRow = findRowById_(publicationJobsSheet_(spreadsheet), event.payload.jobId); if (!jobRow) return { ok: false, code: 'PUBLICATION_JOB_NOT_FOUND' }; var job = jobFromRow_(jobRow); job.status = event.payload.status; if (event.payload.status === 'succeeded' || event.payload.status === 'failed') job.completedAt = event.occurredAt; if (validHttpsUrl_(event.payload.deploymentUrl)) job.deploymentUrl = event.payload.deploymentUrl; if (validText_(event.payload.errorCode, 1, 120)) job.errorCode = event.payload.errorCode; writeJob_(jobRow, job); var propertyRow = findRowById_(propertiesSheet_(spreadsheet), job.propertyId); var property = propertyRow ? propertyFromRow_(propertyRow) : null; if (property) { property.publicationStatus = job.status === 'succeeded' ? 'published' : job.status === 'failed' ? 'publish_failed' : 'publishing'; if (job.status === 'succeeded') property.activeRevisionId = job.revisionId; property.updatedAt = event.occurredAt; writeProperty_(propertyRow, property); } return { ok: true, data: { publicationJob: job, property: property } }; }
+function validForPublish_(spreadsheet, property, revision) { return property.availabilityStatus !== 'withdrawn' && revision.publicationApprovalId && revision.photoApprovalId && revision.photoAuthorizationConfirmedBy && revision.photoAuthorizationConfirmedAt && isApproved_(spreadsheet, revision.publicationApprovalId, 'publication') && isApproved_(spreadsheet, revision.photoApprovalId, 'photographs') && (revision.priceVisibility !== 'public' || Boolean(revision.askingPrice && revision.priceApprovalId && isApproved_(spreadsheet, revision.priceApprovalId, 'price'))); }
+function isApproved_(spreadsheet, approvalId, kind) { return readApprovals_(approvalsSheet_(spreadsheet)).some(function (approval) { return approval.id === approvalId && approval.kind === kind && approval.status === 'approved'; }); }
 
-function usersSheet_(spreadsheet) {
-  return sheet_(spreadsheet, 'Usuarios', ['id', 'name', 'email', 'role', 'status']);
+function cmsSnapshotResponse_(spreadsheet, event) { var actor = resolvedActor_(spreadsheet, event.payload.actor); var propertyId = event.payload.propertyId; if (!actor || !isIdentifier_(propertyId)) return { ok: false, code: 'ACTOR_NOT_AUTHORIZED' }; var row = findRowById_(propertiesSheet_(spreadsheet), propertyId); if (!row) return { ok: false, code: 'PROPERTY_NOT_FOUND' }; var property = propertyFromRow_(row); if (actor.role !== 'admin' && property.assigneeId !== actor.id) return { ok: false, code: 'ASSIGNMENT_REQUIRED' }; var revision = revisionById_(spreadsheet, property.draftRevisionId || property.activeRevisionId); if (!revision) return { ok: false, code: 'REVISION_NOT_FOUND' }; return { ok: true, actor: actor, property: property, revision: revision, images: readImages_(imagesSheet_(spreadsheet)).filter(function (image) { return image.propertyId === property.id && image.revisionId === revision.id; }), publicationJobs: readJobs_(publicationJobsSheet_(spreadsheet)).filter(function (job) { return job.propertyId === property.id; }) }; }
+function snapshotResponse_(spreadsheet, event) { var actor = resolvedActor_(spreadsheet, event.payload.actor); if (!actor) return { ok: false, code: 'ACTOR_NOT_AUTHORIZED' }; var allLeads = readLeads_(leadsSheet_(spreadsheet)); var allProperties = readProperties_(propertiesSheet_(spreadsheet)); var leads = actor.role === 'admin' ? allLeads : allLeads.filter(function (lead) { return lead.assigneeId === actor.id; }); var properties = actor.role === 'admin' ? allProperties : allProperties.filter(function (property) { return property.assigneeId === actor.id; }); var leadIds = leads.map(function (lead) { return lead.id; }); var propertyIds = properties.map(function (property) { return property.id; }); var activities = readActivities_(activitiesSheet_(spreadsheet)).filter(function (activity) { return actor.role === 'admin' || (activity.leadId && leadIds.indexOf(activity.leadId) !== -1) || (activity.propertyId && propertyIds.indexOf(activity.propertyId) !== -1); }); var approvals = readApprovals_(approvalsSheet_(spreadsheet)).filter(function (approval) { return actor.role === 'admin' || leadIds.indexOf(approval.recordId) !== -1 || propertyIds.indexOf(approval.recordId) !== -1; }); return { ok: true, actor: actor, leads: leads, properties: properties, activities: activities, approvals: approvals, users: actor.role === 'admin' ? readUsers_(usersSheet_(spreadsheet)) : [] }; }
+
+function usersSheet_(spreadsheet) { return sheet_(spreadsheet, 'Usuarios', ['id', 'name', 'email', 'role', 'status']); }
+function leadsSheet_(spreadsheet) { return sheet_(spreadsheet, 'Leads', ['event_id', 'received_at', 'name', 'phone', 'email', 'operation', 'district', 'consent_at', 'source', 'utm_source', 'utm_campaign', 'qr_id', 'post_id', 'assigned_to', 'status']); }
+function propertiesSheet_(spreadsheet) { return sheet_(spreadsheet, 'Inmuebles', ['id', 'slug', 'label', 'assignee_id', 'publication_status', 'availability_status', 'version', 'active_revision_id', 'draft_revision_id', 'last_verified_at', 'created_at', 'updated_at']); }
+function revisionsSheet_(spreadsheet) { return sheet_(spreadsheet, 'Versiones Inmueble', ['id', 'property_id', 'revision', 'created_by', 'created_at', 'updated_at', 'payload_json']); }
+function imagesSheet_(spreadsheet) { return sheet_(spreadsheet, 'Imagenes', ['id', 'property_id', 'revision_id', 'category', 'alt', 'sort_order', 'is_cover', 'width', 'height', 'size_bytes', 'mime_type', 'sha256', 'private_object_key', 'public_object_key', 'thumbnail_object_key', 'status', 'uploaded_at', 'intent_id', 'expires_at']); }
+function publicationsSheet_(spreadsheet) { return sheet_(spreadsheet, 'Publicaciones', ['id', 'property_id', 'revision_id', 'snapshot_version', 'publication_approval_id', 'status', 'catalog_json', 'published_at']); }
+function publicationJobsSheet_(spreadsheet) { return sheet_(spreadsheet, 'Trabajos Publicacion', ['id', 'property_id', 'revision_id', 'requested_by', 'status', 'snapshot_version', 'requested_at', 'completed_at', 'deployment_url', 'error_code']); }
+function activitiesSheet_(spreadsheet) { return sheet_(spreadsheet, 'Actividades', ['id', 'type', 'lead_id', 'property_id', 'actor_id', 'occurred_at', 'metadata']); }
+function approvalsSheet_(spreadsheet) { return sheet_(spreadsheet, 'Aprobaciones', ['id', 'kind', 'record_id', 'requested_by', 'status', 'approved_by', 'approved_at', 'rationale', 'decision_reason']); }
+function auditSheet_(spreadsheet) { return sheet_(spreadsheet, 'Auditoria', ['event_id', 'event_type', 'occurred_at', 'received_at', 'status', 'source']); }
+
+function appendProperty_(spreadsheet, property) { appendRow_(propertiesSheet_(spreadsheet), [property.id, property.slug, property.label, property.assigneeId, property.publicationStatus, property.availabilityStatus, property.version, property.activeRevisionId || '', property.draftRevisionId || '', property.lastVerifiedAt || '', property.createdAt, property.updatedAt]); }
+function writeProperty_(row, property) { var map = { slug: property.slug, label: property.label, assignee_id: property.assigneeId, publication_status: property.publicationStatus, availability_status: property.availabilityStatus, version: property.version, active_revision_id: property.activeRevisionId || '', draft_revision_id: property.draftRevisionId || '', last_verified_at: property.lastVerifiedAt || '', created_at: property.createdAt, updated_at: property.updatedAt }; Object.keys(map).forEach(function (key) { setRowValue_(row, key, map[key]); }); }
+function propertyFromRow_(row) { return { id: String(row.values[row.columns.id - 1] || ''), slug: String(row.values[row.columns.slug - 1] || ''), label: String(row.values[row.columns.label - 1] || ''), assigneeId: String(row.values[row.columns.assignee_id - 1] || ''), publicationStatus: String(row.values[row.columns.publication_status - 1] || 'draft'), availabilityStatus: String(row.values[row.columns.availability_status - 1] || 'available'), version: Number(row.values[row.columns.version - 1] || 1), activeRevisionId: optionalString_(row.values[row.columns.active_revision_id - 1]), draftRevisionId: optionalString_(row.values[row.columns.draft_revision_id - 1]), lastVerifiedAt: optionalString_(row.values[row.columns.last_verified_at - 1]), createdAt: String(row.values[row.columns.created_at - 1] || ''), updatedAt: String(row.values[row.columns.updated_at - 1] || '') }; }
+function readProperties_(sheet) { return rows_(sheet, true).map(propertyFromRow_).filter(validCmsProperty_); }
+function appendRevision_(spreadsheet, revision) { appendRow_(revisionsSheet_(spreadsheet), [revision.id, revision.propertyId, revision.revision, revision.createdBy, revision.createdAt, revision.updatedAt, JSON.stringify(revision)]); }
+function replaceRevision_(spreadsheet, revision) { var row = findRowById_(revisionsSheet_(spreadsheet), revision.id); if (row) { setRowValue_(row, 'updated_at', revision.updatedAt); setRowValue_(row, 'payload_json', JSON.stringify(revision)); } else appendRevision_(spreadsheet, revision); }
+function revisionById_(spreadsheet, id) { if (!isIdentifier_(id)) return null; var row = findRowById_(revisionsSheet_(spreadsheet), id); if (!row) return null; try { var revision = JSON.parse(String(row.values[row.columns.payload_json - 1] || '')); return validRevision_(revision) ? revision : null; } catch (_error) { return null; } }
+function appendImage_(spreadsheet, intent, status, uploadedAt) { appendRow_(imagesSheet_(spreadsheet), [intent.imageId, intent.propertyId, intent.revisionId, intent.category, intent.alt, intent.sortOrder, intent.isCover, '', '', intent.sizeBytes, intent.mimeType, intent.sha256, intent.objectKey, '', '', status, uploadedAt || '', intent.intentId, intent.expiresAt]); }
+function imageFromRow_(row) { return { id: String(row.values[row.columns.id - 1] || ''), propertyId: String(row.values[row.columns.property_id - 1] || ''), revisionId: String(row.values[row.columns.revision_id - 1] || ''), category: String(row.values[row.columns.category - 1] || ''), alt: String(row.values[row.columns.alt - 1] || ''), sortOrder: Number(row.values[row.columns.sort_order - 1] || 0), isCover: row.values[row.columns.is_cover - 1] === true || String(row.values[row.columns.is_cover - 1]) === 'true', width: Number(row.values[row.columns.width - 1] || 0), height: Number(row.values[row.columns.height - 1] || 0), sizeBytes: Number(row.values[row.columns.size_bytes - 1] || 0), mimeType: String(row.values[row.columns.mime_type - 1] || ''), privateObjectKey: String(row.values[row.columns.private_object_key - 1] || ''), publicObjectKey: optionalString_(row.values[row.columns.public_object_key - 1]), thumbnailObjectKey: optionalString_(row.values[row.columns.thumbnail_object_key - 1]), status: String(row.values[row.columns.status - 1] || ''), uploadedAt: optionalString_(row.values[row.columns.uploaded_at - 1]) }; }
+function readImages_(sheet) { return rows_(sheet, true).map(imageFromRow_).filter(function (image) { return isIdentifier_(image.id) && isIdentifier_(image.propertyId) && isIdentifier_(image.revisionId) && IMAGE_CATEGORIES.indexOf(image.category) !== -1 && ['uploading', 'uploaded', 'approved', 'rejected'].indexOf(image.status) !== -1 && image.mimeType === 'image/webp'; }); }
+function appendPublication_(spreadsheet, publication) { appendRow_(publicationsSheet_(spreadsheet), [publication.id, publication.propertyId, publication.revisionId, publication.snapshotVersion, publication.publicationApprovalId || '', publication.status, publication.catalogJson || '', publication.publishedAt || '']); }
+function appendJob_(spreadsheet, job) { appendRow_(publicationJobsSheet_(spreadsheet), [job.id, job.propertyId, job.revisionId, job.requestedBy, job.status, job.snapshotVersion, job.requestedAt, job.completedAt || '', job.deploymentUrl || '', job.errorCode || '']); }
+function jobFromRow_(row) { return { id: String(row.values[row.columns.id - 1] || ''), propertyId: String(row.values[row.columns.property_id - 1] || ''), revisionId: String(row.values[row.columns.revision_id - 1] || ''), requestedBy: String(row.values[row.columns.requested_by - 1] || ''), status: String(row.values[row.columns.status - 1] || ''), snapshotVersion: Number(row.values[row.columns.snapshot_version - 1] || 0), requestedAt: String(row.values[row.columns.requested_at - 1] || ''), completedAt: optionalString_(row.values[row.columns.completed_at - 1]), deploymentUrl: optionalString_(row.values[row.columns.deployment_url - 1]), errorCode: optionalString_(row.values[row.columns.error_code - 1]) }; }
+function writeJob_(row, job) { var map = { status: job.status, completed_at: job.completedAt || '', deployment_url: job.deploymentUrl || '', error_code: job.errorCode || '' }; Object.keys(map).forEach(function (key) { setRowValue_(row, key, map[key]); }); }
+function readJobs_(sheet) { return rows_(sheet, true).map(jobFromRow_).filter(function (job) { return isIdentifier_(job.id) && isIdentifier_(job.propertyId) && isIdentifier_(job.revisionId) && isIdentifier_(job.requestedBy) && ['queued', 'running', 'succeeded', 'failed'].indexOf(job.status) !== -1; }); }
+function appendApproval_(spreadsheet, id, kind, recordId, actorId, rationale) { if (!findRowById_(approvalsSheet_(spreadsheet), id)) appendRow_(approvalsSheet_(spreadsheet), [id, kind, recordId, actorId, 'pending', '', '', rationale, '']); }
+function appendActivity_(spreadsheet, id, type, leadId, actorId, occurredAt, metadata) { appendRow_(activitiesSheet_(spreadsheet), [id, type, leadId || '', '', actorId || '', occurredAt, JSON.stringify(metadata || {})]); }
+function appendActivityForRecord_(spreadsheet, id, type, record, actorId, occurredAt, metadata) { appendRow_(activitiesSheet_(spreadsheet), [id, type, record.leadId || '', record.propertyId || '', actorId || '', occurredAt, JSON.stringify(metadata || {})]); }
+function sourceFor_(event) { return event.payload && event.payload.attribution ? event.payload.attribution.source || 'manual' : 'channel'; }
+function resolvedActor_(spreadsheet, input) { if (!isObject_(input) || !isIdentifier_(input.id)) return null; var email = typeof input.email === 'string' ? input.email.toLowerCase() : ''; return readUsers_(usersSheet_(spreadsheet)).find(function (actor) { return actor.status === 'active' && (actor.id === input.id || (email && actor.email && actor.email.toLowerCase() === email)); }) || null; }
+function activeActorById_(spreadsheet, actorId) { return readUsers_(usersSheet_(spreadsheet)).find(function (actor) { return actor.id === actorId && actor.status === 'active'; }) || null; }
+function readUsers_(sheet) { return rows_(sheet).map(function (row) { return { id: String(row.id || ''), name: String(row.name || ''), email: String(row.email || ''), role: String(row.role || ''), status: String(row.status || '') }; }).filter(function (actor) { return isIdentifier_(actor.id) && actor.name && ['admin', 'user'].indexOf(actor.role) !== -1; }); }
+function readLeads_(sheet) { return rows_(sheet).map(function (row) { return { id: String(row.event_id || ''), ownerName: String(row.name || ''), assigneeId: String(row.assigned_to || ''), stage: String(row.status || 'new'), consentAt: String(row.consent_at || ''), attribution: { source: String(row.source || 'manual'), utmSource: optionalString_(row.utm_source), utmCampaign: optionalString_(row.utm_campaign), qrId: optionalString_(row.qr_id), postId: optionalString_(row.post_id) }, operation: optionalString_(row.operation), district: optionalString_(row.district), createdAt: optionalString_(row.received_at), contact: { phone: String(row.phone || ''), email: optionalString_(row.email) } }; }).filter(function (lead) { return isIdentifier_(lead.id) && (lead.assigneeId === '' || isIdentifier_(lead.assigneeId)) && ['new', 'qualified', 'visit_scheduled', 'offer_received', 'closed', 'lost'].indexOf(lead.stage) !== -1 && ['website', 'whatsapp', 'instagram', 'portal', 'manual'].indexOf(lead.attribution.source) !== -1; }); }
+function readActivities_(sheet) { return rows_(sheet).map(function (row) { var metadata = {}; try { metadata = JSON.parse(String(row.metadata || '{}')); } catch (_error) { metadata = {}; } return { id: String(row.id || ''), type: String(row.type || ''), leadId: optionalString_(row.lead_id), propertyId: optionalString_(row.property_id), actorId: String(row.actor_id || ''), occurredAt: String(row.occurred_at || ''), metadata: metadata }; }).filter(function (activity) { return isIdentifier_(activity.id) && ACTIVITY_TYPES.indexOf(activity.type) !== -1 && isIdentifier_(activity.actorId); }); }
+function readApprovals_(sheet) { return rows_(sheet).map(function (row) { return { id: String(row.id || ''), kind: String(row.kind || ''), recordId: String(row.record_id || ''), requestedBy: String(row.requested_by || ''), status: String(row.status || ''), approvedBy: optionalString_(row.approved_by), approvedAt: optionalString_(row.approved_at), rationale: String(row.rationale || ''), decisionReason: optionalString_(row.decision_reason) }; }).filter(function (approval) { return isIdentifier_(approval.id) && APPROVAL_KINDS.indexOf(approval.kind) !== -1 && isIdentifier_(approval.recordId) && isIdentifier_(approval.requestedBy) && ['pending', 'approved', 'rejected'].indexOf(approval.status) !== -1; }); }
+function recordById_(spreadsheet, recordId) { var lead = findRowById_(leadsSheet_(spreadsheet), recordId); if (lead) return { leadId: recordId, assigneeId: String(lead.values[lead.columns.assigned_to - 1] || '') }; var property = findRowById_(propertiesSheet_(spreadsheet), recordId); return property ? { propertyId: recordId, assigneeId: String(property.values[property.columns.assignee_id - 1] || '') } : null; }
+function findRowById_(sheet, id) { var rows = rows_(sheet, true); for (var index = 0; index < rows.length; index += 1) if (String(rows[index].values[0]) === id) return { sheet: sheet, row: rows[index].row, values: rows[index].values, columns: rows[index].columns }; return null; }
+function rows_(sheet, includePosition) { var values = sheet.getDataRange().getValues(); if (values.length < 2) return []; var headers = values[0].map(function (header) { return String(header); }); var columns = {}; headers.forEach(function (header, index) { columns[header] = index + 1; }); return values.slice(1).map(function (values, index) { if (includePosition) return { row: index + 2, values: values, columns: columns }; var row = {}; headers.forEach(function (header, columnIndex) { row[header] = values[columnIndex]; }); return row; }); }
+function eventExists_(sheet, eventId) { var lastRow = sheet.getLastRow(); return lastRow >= 2 && sheet.getRange(2, 1, lastRow - 1, 1).getValues().some(function (row) { return row[0] === eventId; }); }
+function sheet_(spreadsheet, name, headers) { var sheet = spreadsheet.getSheetByName(name) || spreadsheet.insertSheet(name); if (sheet.getLastRow() === 0) { appendRow_(sheet, headers); return sheet; } var current = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(String); headers.forEach(function (header) { if (current.indexOf(header) === -1) { sheet.getRange(1, sheet.getLastColumn() + 1).setValue(header); current.push(header); } }); return sheet; }
+function setRowValue_(row, key, value) { if (row.columns[key]) row.sheet.getRange(row.row, row.columns[key]).setValue(safeCell_(value)); }
+function appendRow_(sheet, values) { sheet.appendRow(values.map(safeCell_)); }
+function safeCell_(value) { var text = value === undefined || value === null ? '' : String(value); return /^[=+\-@]/.test(text) ? "'" + text : text; }
+function validCmsProperty_(property) { return isObject_(property) && isIdentifier_(property.id) && typeof property.slug === 'string' && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(property.slug) && property.slug.length <= 100 && validText_(property.label, 3, 180) && isIdentifier_(property.assigneeId) && PROPERTY_STATUSES.indexOf(property.publicationStatus) !== -1 && AVAILABILITY_STATUSES.indexOf(property.availabilityStatus) !== -1 && validExpectedVersion_(property.version) && validIso_(property.createdAt) && validIso_(property.updatedAt); }
+function validRevision_(revision) { return isObject_(revision) && isIdentifier_(revision.id) && isIdentifier_(revision.propertyId) && validExpectedVersion_(revision.revision) && validText_(revision.title, 3, 180) && ['sale', 'rent'].indexOf(revision.operation) !== -1 && validText_(revision.district, 2, 120) && validPositive_(revision.builtAreaM2, 1000000) && validNonNegativeInt_(revision.bedrooms, 100) && validNonNegativeInt_(revision.bathrooms, 100) && validNonNegativeInt_(revision.parking, 100) && validNonNegativeInt_(revision.studies, 100) && validText_(revision.summary, 10, 4000) && Array.isArray(revision.features) && revision.features.length <= 60 && revision.features.every(function (item) { return validText_(item, 1, 160); }) && ['consult', 'public'].indexOf(revision.priceVisibility) !== -1 && isObject_(revision.privateDetails) && isIdentifier_(revision.createdBy) && validIso_(revision.createdAt) && validIso_(revision.updatedAt); }
+function validIntent_(intent, property, revisionId) { return isObject_(intent) && UUID_PATTERN.test(String(intent.intentId || '')) && UUID_PATTERN.test(String(intent.imageId || '')) && intent.propertyId === property.id && intent.revisionId === revisionId && IMAGE_CATEGORIES.indexOf(intent.category) !== -1 && validText_(intent.alt, 3, 240) && validNonNegativeInt_(intent.sortOrder, 10000) && typeof intent.isCover === 'boolean' && validPositive_(intent.sizeBytes, MAX_PROPERTY_IMAGE_BYTES) && intent.mimeType === 'image/webp' && /^[a-f0-9]{64}$/i.test(String(intent.sha256 || '')) && typeof intent.objectKey === 'string' && intent.objectKey === 'local/properties/' + property.id + '/' + revisionId + '/' + intent.imageId + '.webp' && validIso_(intent.expiresAt) && Date.parse(intent.expiresAt) > Date.now() && Date.parse(intent.expiresAt) - Date.now() <= CLOCK_SKEW_MS && typeof intent.uploadToken === 'string' && intent.uploadToken.length <= 600 && typeof intent.thumbnailUploadToken === 'string' && intent.thumbnailUploadToken.length <= 600; }
+
+function cmsJobSnapshotResponse_(spreadsheet, event) {
+  var jobId = event.payload.jobId;
+  if (!UUID_PATTERN.test(String(jobId || ''))) return { ok: false, code: 'INVALID_PUBLICATION_JOB' };
+  var jobRow = findRowById_(publicationJobsSheet_(spreadsheet), jobId);
+  if (!jobRow) return { ok: false, code: 'PUBLICATION_JOB_NOT_FOUND' };
+  var publicationJob = jobFromRow_(jobRow);
+  if (publicationJob.status !== 'queued') return { ok: false, code: 'PUBLICATION_JOB_NOT_AVAILABLE' };
+  var allImages = readImages_(imagesSheet_(spreadsheet));
+  var catalogEntries = readProperties_(propertiesSheet_(spreadsheet)).map(function (property) {
+    var isTarget = property.id === publicationJob.propertyId;
+    var revisionId = isTarget ? publicationJob.revisionId : property.activeRevisionId;
+    var revision = revisionById_(spreadsheet, revisionId);
+    if (!revision) return null;
+    return { property: property, revision: revision, images: allImages.filter(function (image) { return image.propertyId === property.id && image.revisionId === revision.id; }), publicationTarget: isTarget && property.publicationStatus === 'publishing' ? 'candidate' : 'active' };
+  }).filter(function (entry) { return entry !== null; });
+  if (!catalogEntries.some(function (entry) { return entry.property.id === publicationJob.propertyId; })) return { ok: false, code: 'PUBLICATION_SNAPSHOT_NOT_FOUND' };
+  return { ok: true, catalogEntries: catalogEntries, publicationJob: publicationJob };
 }
+function hasActivePublicationJob_(spreadsheet) { return readJobs_(publicationJobsSheet_(spreadsheet)).some(function (job) { return job.status === 'queued' || job.status === 'running'; }); }
+function validMetadata_(metadata) { return isObject_(metadata) && Object.keys(metadata).length <= 10 && Object.keys(metadata).every(function (key) { return key.length > 0 && key.length <= 120 && validText_(metadata[key], 0, 1000); }); }
+function validText_(value, min, max) { return typeof value === 'string' && value.trim().length >= min && value.trim().length <= max; }
+function validPositive_(value, max) { return typeof value === 'number' && isFinite(value) && value > 0 && value <= max; }
+function validNonNegativeInt_(value, max) { return typeof value === 'number' && isFinite(value) && Math.floor(value) === value && value >= 0 && value <= max; }
+function validExpectedVersion_(value) { return validNonNegativeInt_(value, 1000000) && value > 0; }
+function validIso_(value) { return typeof value === 'string' && isFinite(Date.parse(value)); }
+function validHttpsUrl_(value) { return validText_(value, 8, 2048) && /^https:\/\//.test(value); }
+function optionalString_(value) { return value === undefined || value === null || String(value) === '' ? undefined : String(value); }
+function isObject_(value) { return value !== null && typeof value === 'object' && !Array.isArray(value); }
+function isIdentifier_(value) { return typeof value === 'string' && ID_PATTERN.test(value); }
+function hmacHex_(key, message) { return Utilities.computeHmacSha256Signature(message, key).map(function (byte) { var normalized = byte < 0 ? byte + 256 : byte; return normalized.toString(16).padStart(2, '0'); }).join(''); }
+function constantTimeEquals_(left, right) { var difference = left.length ^ right.length; var length = Math.max(left.length, right.length); for (var index = 0; index < length; index += 1) difference |= (index < left.length ? left.charCodeAt(index) : 0) ^ (index < right.length ? right.charCodeAt(index) : 0); return difference === 0; }
+function requiredProperty_(name) { var value = PropertiesService.getScriptProperties().getProperty(name); if (!value) throw new Error('Missing script property'); return value; }
+function response_(payload) { return ContentService.createTextOutput(JSON.stringify(payload)).setMimeType(ContentService.MimeType.JSON); }
 
-function leadsSheet_(spreadsheet) {
-  return sheet_(spreadsheet, 'Leads', ['event_id', 'received_at', 'name', 'phone', 'email', 'operation', 'district', 'consent_at', 'source', 'utm_source', 'utm_campaign', 'qr_id', 'post_id', 'assigned_to', 'status']);
-}
-
-function propertiesSheet_(spreadsheet) {
-  return sheet_(spreadsheet, 'Inmuebles', ['id', 'label', 'assignee_id', 'publication_status']);
-}
-
-function activitiesSheet_(spreadsheet) {
-  return sheet_(spreadsheet, 'Actividades', ['id', 'type', 'lead_id', 'property_id', 'actor_id', 'occurred_at', 'metadata']);
-}
-
-function approvalsSheet_(spreadsheet) {
-  return sheet_(spreadsheet, 'Aprobaciones', ['id', 'kind', 'record_id', 'requested_by', 'status', 'approved_by', 'approved_at', 'rationale', 'decision_reason']);
-}
-
-function auditSheet_(spreadsheet) {
-  return sheet_(spreadsheet, 'Auditoria', ['event_id', 'event_type', 'occurred_at', 'received_at', 'status', 'source']);
-}
-
-function appendActivity_(spreadsheet, id, type, leadId, actorId, occurredAt, metadata) {
-  appendRow_(activitiesSheet_(spreadsheet), [id, type, leadId || '', '', actorId || '', occurredAt, JSON.stringify(metadata || {})]);
-}
-
-function appendActivityForRecord_(spreadsheet, id, type, record, actorId, occurredAt, metadata) {
-  appendRow_(activitiesSheet_(spreadsheet), [id, type, record.leadId || '', record.propertyId || '', actorId || '', occurredAt, JSON.stringify(metadata || {})]);
-}
-
-function sourceFor_(event) {
-  return event.payload && event.payload.attribution ? event.payload.attribution.source || 'manual' : 'channel';
-}
-
-function resolvedActor_(spreadsheet, input) {
-  if (!isObject_(input) || !isIdentifier_(input.id)) return null;
-  var email = typeof input.email === 'string' ? input.email.toLowerCase() : '';
-  var rows = readUsers_(usersSheet_(spreadsheet));
-  return rows.find(function (actor) {
-    return actor.status === 'active' && (actor.id === input.id || (email && actor.email && actor.email.toLowerCase() === email));
-  }) || null;
-}
-
-function activeActorById_(spreadsheet, actorId) {
-  return readUsers_(usersSheet_(spreadsheet)).find(function (actor) { return actor.id === actorId && actor.status === 'active'; }) || null;
-}
-
-function readUsers_(sheet) {
-  return rows_(sheet).map(function (row) {
-    return { id: String(row.id || ''), name: String(row.name || ''), email: String(row.email || ''), role: String(row.role || ''), status: String(row.status || '') };
-  }).filter(function (actor) { return isIdentifier_(actor.id) && actor.name && ['admin', 'user'].indexOf(actor.role) !== -1; });
-}
-
-function readLeads_(sheet) {
-  return rows_(sheet).map(function (row) {
-    return {
-      id: String(row.event_id || ''), ownerName: String(row.name || ''), assigneeId: String(row.assigned_to || ''), stage: String(row.status || 'new'), consentAt: String(row.consent_at || ''),
-      attribution: { source: String(row.source || 'manual'), utmSource: optionalString_(row.utm_source), utmCampaign: optionalString_(row.utm_campaign), qrId: optionalString_(row.qr_id), postId: optionalString_(row.post_id) },
-      operation: optionalString_(row.operation), district: optionalString_(row.district), createdAt: optionalString_(row.received_at), contact: { phone: String(row.phone || ''), email: optionalString_(row.email) }
-    };
-  }).filter(function (lead) { return isIdentifier_(lead.id) && (lead.assigneeId === '' || isIdentifier_(lead.assigneeId)) && ['new', 'qualified', 'visit_scheduled', 'offer_received', 'closed', 'lost'].indexOf(lead.stage) !== -1 && ['website', 'whatsapp', 'instagram', 'portal', 'manual'].indexOf(lead.attribution.source) !== -1; });
-}
-
-function readProperties_(sheet) {
-  return rows_(sheet).map(function (row) {
-    return { id: String(row.id || ''), label: String(row.label || ''), assigneeId: String(row.assignee_id || ''), publicationStatus: String(row.publication_status || 'draft') };
-  }).filter(function (property) { return isIdentifier_(property.id) && isIdentifier_(property.assigneeId) && ['draft', 'approved', 'published', 'paused'].indexOf(property.publicationStatus) !== -1; });
-}
-
-function readActivities_(sheet) {
-  return rows_(sheet).map(function (row) {
-    var metadata = {};
-    try { metadata = JSON.parse(String(row.metadata || '{}')); } catch (_error) { metadata = {}; }
-    return { id: String(row.id || ''), type: String(row.type || ''), leadId: optionalString_(row.lead_id), propertyId: optionalString_(row.property_id), actorId: String(row.actor_id || ''), occurredAt: String(row.occurred_at || ''), metadata: metadata };
-  }).filter(function (activity) { return isIdentifier_(activity.id) && ACTIVITY_TYPES.indexOf(activity.type) !== -1 && isIdentifier_(activity.actorId); });
-}
-
-function readApprovals_(sheet) {
-  return rows_(sheet).map(function (row) {
-    return { id: String(row.id || ''), kind: String(row.kind || ''), recordId: String(row.record_id || ''), requestedBy: String(row.requested_by || ''), status: String(row.status || ''), approvedBy: optionalString_(row.approved_by), approvedAt: optionalString_(row.approved_at), rationale: String(row.rationale || ''), decisionReason: optionalString_(row.decision_reason) };
-  }).filter(function (approval) { return isIdentifier_(approval.id) && APPROVAL_KINDS.indexOf(approval.kind) !== -1 && isIdentifier_(approval.recordId) && isIdentifier_(approval.requestedBy) && ['pending', 'approved', 'rejected'].indexOf(approval.status) !== -1; });
-}
-
-function recordById_(spreadsheet, recordId) {
-  var lead = findRowById_(leadsSheet_(spreadsheet), recordId);
-  if (lead) return { leadId: recordId, assigneeId: String(lead.values[lead.columns.assigned_to - 1] || '') };
-  var property = findRowById_(propertiesSheet_(spreadsheet), recordId);
-  return property ? { propertyId: recordId, assigneeId: String(property.values[property.columns.assignee_id - 1] || '') } : null;
-}
-
-function findRowById_(sheet, id) {
-  var rows = rows_(sheet, true);
-  for (var index = 0; index < rows.length; index += 1) {
-    if (String(rows[index].values[0]) === id) return { sheet: sheet, row: rows[index].row, values: rows[index].values, columns: rows[index].columns };
+function cmsAvailabilitySweep_(spreadsheet, event) {
+  var now = new Date(event.occurredAt);
+  var warningIds = []; var hiddenIds = []; var hiddenProperty = null;
+  if (!UUID_PATTERN.test(String(event.payload.jobId || ''))) return { ok: false, code: 'AVAILABILITY_JOB_REQUIRED' };
+  if (hasActivePublicationJob_(spreadsheet)) return { ok: true, data: { warnedPropertyIds: warningIds, autoHiddenPropertyIds: hiddenIds, deferred: true } };
+  rows_(propertiesSheet_(spreadsheet), true).forEach(function (row) {
+    var property = propertyFromRow_(row);
+    var verified = property.lastVerifiedAt ? new Date(property.lastVerifiedAt) : null;
+    var ageDays = verified && !isNaN(verified.valueOf()) ? (now.valueOf() - verified.valueOf()) / 86400000 : Infinity;
+    if (ageDays >= 14 && property.publicationStatus === 'published' && !hiddenProperty) {
+      property.publicationStatus = 'paused'; property.version += 1; property.updatedAt = event.occurredAt; writeProperty_(row, property); hiddenIds.push(property.id);
+      hiddenProperty = property;
+      appendActivityForRecord_(spreadsheet, event.eventId + '-hide-' + property.id, 'manual_follow_up', { propertyId: property.id }, 'system', event.occurredAt, { action: 'availability_auto_hidden_14d' });
+    } else if (ageDays >= 7) {
+      warningIds.push(property.id);
+      appendActivityForRecord_(spreadsheet, event.eventId + '-warn-' + property.id, 'manual_follow_up', { propertyId: property.id }, 'system', event.occurredAt, { action: 'availability_warning_7d' });
+    }
+  });
+  var publicationJob = null;
+  if (hiddenProperty && hiddenProperty.activeRevisionId && UUID_PATTERN.test(String(event.payload.jobId || ''))) {
+    publicationJob = { id: event.payload.jobId, propertyId: hiddenProperty.id, revisionId: hiddenProperty.activeRevisionId, requestedBy: 'system', status: 'queued', snapshotVersion: hiddenProperty.version, requestedAt: event.occurredAt };
+    appendPublication_(spreadsheet, { id: publicationJob.id, propertyId: hiddenProperty.id, revisionId: hiddenProperty.activeRevisionId, snapshotVersion: hiddenProperty.version, publicationApprovalId: '', status: 'queued', catalogJson: '', publishedAt: '' });
+    appendJob_(spreadsheet, publicationJob);
   }
-  return null;
-}
-
-function rows_(sheet, includePosition) {
-  var values = sheet.getDataRange().getValues();
-  if (values.length < 2) return [];
-  var headers = values[0].map(function (header) { return String(header); });
-  var columns = {};
-  headers.forEach(function (header, index) { columns[header] = index + 1; });
-  return values.slice(1).map(function (values, index) {
-    if (includePosition) return { row: index + 2, values: values, columns: columns };
-    var row = {};
-    headers.forEach(function (header, columnIndex) { row[header] = values[columnIndex]; });
-    return row;
-  });
-}
-
-function eventExists_(sheet, eventId) {
-  var lastRow = sheet.getLastRow();
-  if (lastRow < 2) return false;
-  return sheet.getRange(2, 1, lastRow - 1, 1).getValues().some(function (row) { return row[0] === eventId; });
-}
-
-function sheet_(spreadsheet, name, headers) {
-  var sheet = spreadsheet.getSheetByName(name) || spreadsheet.insertSheet(name);
-  if (sheet.getLastRow() === 0) appendRow_(sheet, headers);
-  return sheet;
-}
-
-function appendRow_(sheet, values) {
-  sheet.appendRow(values.map(safeCell_));
-}
-
-function safeCell_(value) {
-  var text = value === undefined || value === null ? '' : String(value);
-  return /^[=+\-@]/.test(text) ? "'" + text : text;
-}
-
-function validMetadata_(metadata) {
-  return isObject_(metadata) && Object.keys(metadata).length <= 10 && Object.keys(metadata).every(function (key) {
-    return key.length > 0 && key.length <= 120 && validText_(metadata[key], 0, 1000);
-  });
-}
-
-function validText_(value, min, max) {
-  return typeof value === 'string' && value.trim().length >= min && value.trim().length <= max;
-}
-
-function optionalString_(value) {
-  return value === undefined || value === null || String(value) === '' ? undefined : String(value);
-}
-
-function isObject_(value) {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
-
-function isIdentifier_(value) {
-  return typeof value === 'string' && ID_PATTERN.test(value);
-}
-
-function hmacHex_(key, message) {
-  return Utilities.computeHmacSha256Signature(message, key).map(function (byte) {
-    var normalized = byte < 0 ? byte + 256 : byte;
-    return normalized.toString(16).padStart(2, '0');
-  }).join('');
-}
-
-function constantTimeEquals_(left, right) {
-  var difference = left.length ^ right.length;
-  for (var index = 0; index < left.length; index += 1) {
-    difference |= left.charCodeAt(index) ^ (index < right.length ? right.charCodeAt(index) : 0);
-  }
-  return difference === 0;
-}
-
-function requiredProperty_(name) {
-  var value = PropertiesService.getScriptProperties().getProperty(name);
-  if (!value) throw new Error('Missing script property');
-  return value;
-}
-
-function response_(payload) {
-  return ContentService.createTextOutput(JSON.stringify(payload)).setMimeType(ContentService.MimeType.JSON);
+  return { ok: true, data: { warnedPropertyIds: warningIds, autoHiddenPropertyIds: hiddenIds, publicationJob: publicationJob } };
 }
