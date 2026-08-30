@@ -14,3 +14,12 @@ test('el flujo público exige consentimiento y comunica respaldo manual', async 
   await expect(page.getByText(/no pudimos registrar tu solicitud/i)).toBeVisible();
   await expect(page.getByRole('link', { name: /continúa por whatsapp/i })).toHaveAttribute('href', /wa\.me\/51936242247/);
 });
+
+test('el catálogo estático expone una ficha indexable y una CTA trazable', async ({ page }) => {
+  await page.goto('/propiedades/');
+  await expect(page.getByRole('heading', { name: /propiedades con contexto/i })).toBeVisible();
+  await page.getByRole('link', { name: /ver ficha de casa arce/i }).click();
+  await expect(page).toHaveTitle(/Casa Arce/i);
+  await expect(page.getByRole('heading', { name: /casa arce/i })).toBeVisible();
+  await expect(page.getByRole('link', { name: /consultar por whatsapp/i })).toHaveAttribute('href', /property_id%3Dprop-demo-001/);
+});

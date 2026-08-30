@@ -3,6 +3,7 @@ export const landingContent = {
   navigation: [
     { label: 'Vender', href: '#vender' },
     { label: 'Comprar', href: '#comprar' },
+    { label: 'Propiedades', href: '/propiedades/' },
     { label: 'Cómo trabajamos', href: '#metodo' },
     { label: 'Contacto', href: '#contacto' },
   ],

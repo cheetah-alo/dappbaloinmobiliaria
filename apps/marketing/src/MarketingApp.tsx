@@ -18,6 +18,7 @@ function Brand() {
 export function MarketingApp() {
   const [menuOpen, setMenuOpen] = useState(false);
   const whatsapp = whatsappHref();
+  const catalogHref = `${import.meta.env.BASE_URL}propiedades/`;
 
   return (
     <div className="site-shell">
@@ -30,7 +31,7 @@ export function MarketingApp() {
             <span aria-hidden="true" />
           </button>
           <nav id="primary-navigation" className={menuOpen ? 'nav-links open' : 'nav-links'} aria-label="Navegación principal">
-            {landingContent.navigation.map((item) => <a key={item.href} href={item.href} onClick={() => setMenuOpen(false)}>{item.label}</a>)}
+            {landingContent.navigation.map((item) => <a key={item.href} href={item.href === '/propiedades/' ? catalogHref : item.href} onClick={() => setMenuOpen(false)}>{item.label}</a>)}
           </nav>
           <a className="button button-primary nav-cta" href="#contacto">Habla con Orlando</a>
         </div>

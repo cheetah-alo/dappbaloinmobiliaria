@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { canAccessAssignedRecord, canApprove, canAssign, canCreateActivity, canRequestApproval, type Activity, type ActivityType, type Actor, type Approval, type ApprovalKind, type ApprovalStatus, type Lead } from '@balo/contracts';
 import { OpsApiClient, OpsApiError, type OpsDashboard } from './opsApi';
+import { demoProperties, PropertyManager } from './PropertyManager';
 
 const api = new OpsApiClient();
 
@@ -32,7 +33,7 @@ const demoDashboard = (actor: Actor): OpsDashboard => ({
   actor,
   users: demoActors,
   leads: demoLeads,
-  properties: [],
+  properties: demoProperties,
   activities: demoActivities,
   approvals: demoApprovals,
 });
@@ -47,7 +48,7 @@ const emptyAuthorizedDashboard: OpsDashboard = {
 };
 
 const approvalLabels: Record<ApprovalKind, string> = {
-  price: 'Precio', publication: 'Publicación', commission: 'Comisión', discount: 'Descuento', closure: 'Cierre',
+  price: 'Precio', photographs: 'Fotografías', publication: 'Publicación', commission: 'Comisión', discount: 'Descuento', closure: 'Cierre',
 };
 
 const stageLabels: Record<Lead['stage'], string> = {
@@ -222,7 +223,7 @@ export function OpsApp() {
         <a className="ops-brand" href="#inicio" aria-label="Balo Operación, inicio">BALO <span>OPERACIÓN</span></a>
         {demoMode && <p className="pilot-label">PILOTO · DATOS FICTICIOS</p>}
         <nav aria-label="Navegación del portal">
-          <a href="#casos">Casos</a><a href="#bitacora">Bitácora</a><a href="#aprobaciones">Decisiones</a>
+          <a href="#propiedades">Propiedades</a><a href="#casos">Casos</a><a href="#bitacora">Bitácora</a><a href="#aprobaciones">Decisiones</a>
         </nav>
         <div className="access-note">
           <strong>{demoMode ? 'Demostración local' : 'Acceso protegido'}</strong>
@@ -249,6 +250,8 @@ export function OpsApp() {
           <article><span>Decisiones pendientes</span><strong>{decisionCount}</strong><small>{actor.role === 'admin' ? 'en tu bandeja' : 'en expedientes visibles'}</small></article>
         </section>
 
+        <PropertyManager actor={actor} users={snapshot.users} properties={snapshot.properties} demoMode={demoMode} api={api} onRefresh={refresh} />
+
         <section className="panel case-panel" id="casos">
           <div className="panel-title"><div><p className="kicker">CASOS</p><h2>{actor.role === 'admin' ? 'Entrada, asignación y seguimiento' : 'Tus expedientes asignados'}</h2></div><span className="panel-caption">{demoMode ? 'Demostración' : 'Datos autorizados'}</span></div>
           <div className="case-layout">
@@ -270,7 +273,7 @@ export function OpsApp() {
         </section>
 
         {selectedLead && canRequestApproval(actor, selectedLead) && <section className="panel request-panel">
-          <div><p className="kicker">SOLICITUD DE DECISIÓN</p><h2>Elevar una decisión a Orlando</h2><p>Precio, publicación, comisión, descuento y cierre requieren una razón y la decisión del administrador.</p></div>
+          <div><p className="kicker">SOLICITUD DE DECISIÓN</p><h2>Elevar una decisión a Orlando</h2><p>Precio, fotografías, publicación, comisión, descuento y cierre requieren una razón y la decisión del administrador.</p></div>
           <form onSubmit={requestApproval}><label>Tipo<select name="kind" defaultValue="price">{(Object.entries(approvalLabels) as [ApprovalKind, string][]).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label>Contexto y recomendación<textarea name="rationale" required minLength={8} placeholder="Explica qué se necesita decidir y por qué." /></label><button className="button-primary" disabled={busy === 'request'}>{busy === 'request' ? 'Enviando…' : 'Solicitar aprobación'}</button></form>
         </section>}
 
