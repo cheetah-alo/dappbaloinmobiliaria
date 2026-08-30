@@ -408,7 +408,8 @@ describe('CMS de propiedades: seguridad y trazabilidad', () => {
     const uploadMatch = intent.uploadUrl.match(/intents\/([0-9a-f-]{36})\/upload/);
     expect(uploadMatch?.[1]).toBeDefined();
     const intentId = uploadMatch?.[1] ?? '';
-    const manipulated = `${intent.uploadToken.slice(0, -1)}0`;
+    const lastCharacter = intent.uploadToken.at(-1);
+    const manipulated = `${intent.uploadToken.slice(0, -1)}${lastCharacter === '0' ? '1' : '0'}`;
     const denied = await handleRequest(opsRequest(`/v1/ops/media/intents/${intentId}/complete`, admin, {
       method: 'POST', headers: { 'x-balo-csrf': csrf }, body: JSON.stringify({ uploadToken: manipulated, thumbnailUploadToken: intent.thumbnailUploadToken, width: 1200, height: 800, sizeBytes: 1234, mimeType: 'image/webp', sha256: 'b'.repeat(64) }),
     }), r2Env, gatewayWithSnapshot());
