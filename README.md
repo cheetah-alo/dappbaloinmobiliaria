@@ -16,7 +16,11 @@ privado para el equipo. Los prototipos históricos se conservan en
 | API perimetral | `apps/edge-api` | Cloudflare Worker: valida entradas, Access JWT, gateway firmado y fallos honestos. |
 | Gateway Sheets | `apps/sheets-gateway` | Proyecto de Google Apps Script para la cuenta de Orlando. No se despliega desde aquí. |
 | Contratos | `packages/contracts` | Tipos, permisos, aprobaciones, eventos y pruebas compartidas. |
+| Sistema visual | `packages/design-system` | Tokens compartidos de marca, tipografía, espaciado y estados visuales. |
 | Decisiones y despliegue | `docs/` | Guías de cuentas, límites, privacidad y activación manual. |
+
+La guía de adaptación visual y de copy está en [`docs/design-system.md`](docs/design-system.md).
+La propuesta de catálogo verificable está en [`docs/property-catalog.md`](docs/property-catalog.md).
 
 ## Principios no negociables
 
@@ -43,6 +47,16 @@ npm run dev:marketing
 npm run dev:ops
 npm run verify
 ```
+
+Sin variables públicas, el servidor de desarrollo muestra un modo de prueba:
+permite validar el formulario, pero deja claro que no envió ni guardó datos.
+Para activar un entorno real, copiar `apps/marketing/.env.example` a un archivo
+local ignorado y completar la URL pública del Worker, la clave pública de
+Turnstile y el WhatsApp oficial de Orlando. Ninguna variable `VITE_*` puede
+contener secretos.
+
+El número público confirmado `+51 936 242 247` queda como respaldo seguro del
+frontend y puede sobrescribirse por entorno con `VITE_BALO_WHATSAPP`.
 
 El Worker se valida con `npm run check:worker`. No se despliega automáticamente
 ni se comunica con Google, WhatsApp, Meta o TikTok hasta que Orlando proporcione

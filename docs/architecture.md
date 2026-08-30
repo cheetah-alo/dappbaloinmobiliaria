@@ -19,6 +19,18 @@ Web comercial (GitHub Pages) ── UTM, QR, post_id ──► Worker de Cloudfl
                    lead → visita → oferta → decisión
 ```
 
+La presentación visual se desacopla de las aplicaciones mediante
+`packages/design-system`; el copy público se mantiene en un único archivo de
+contenido para poder iterar sin alterar el formulario ni los controles de
+seguridad. Véase [`docs/design-system.md`](design-system.md).
+
+El catálogo público se incorporará como páginas estáticas indexables en
+`/propiedades/` y `/propiedades/<slug>/`. Durante el piloto se genera desde una
+exportación pública validada de Sheets; después podrá consultar un endpoint de
+solo lectura del Worker. En ambos casos, únicamente expone inmuebles con
+publicación aprobada y disponibilidad vigente, según
+[`property-catalog.md`](property-catalog.md).
+
 ## Límites de confianza
 
 - La web comercial solo consume `POST /v1/public/owner-enquiries`. El portal
