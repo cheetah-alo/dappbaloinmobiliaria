@@ -23,7 +23,7 @@ ownership:
 access_model:
   admin: Orlando
   user: gestores_only_assigned_records
-  sensitive_approvals: [price, publication, commission, discount, closure]
+  sensitive_approvals: [price, photographs, publication, commission, discount, closure]
 
 deployment:
   github_pages: manual_after_orlando_approval

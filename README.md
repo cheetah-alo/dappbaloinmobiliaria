@@ -21,6 +21,8 @@ privado para el equipo. Los prototipos históricos se conservan en
 
 La guía de adaptación visual y de copy está en [`docs/design-system.md`](docs/design-system.md).
 La propuesta de catálogo verificable está en [`docs/property-catalog.md`](docs/property-catalog.md).
+El flujo editorial y la publicación automática se documentan en
+[`docs/property-publishing.md`](docs/property-publishing.md).
 
 ## Principios no negociables
 
@@ -29,13 +31,14 @@ La propuesta de catálogo verificable está en [`docs/property-catalog.md`](docs
 - Un gestor (`user`) solo ve y actualiza registros que tenga asignados. Orlando
   (`admin`) puede asignar y aprobar las decisiones sensibles. La regla se aplica
   en el Worker, no solo en la interfaz.
-- Precio, publicación, comisión, descuento y cierre no cambian sin una
-  aprobación de Orlando registrada.
+- Precio, fotografías, publicación, comisión, descuento y cierre no cambian sin
+  una aprobación de Orlando registrada.
 - Ningún formulario, webhook o publicación se confirma como exitoso si el
   gateway o el conector falla. Se entrega una alternativa manual/WhatsApp con
   identificador trazable.
-- No se usan resultados, inmuebles ni integraciones inventadas. Todo ejemplo en
-  el código es ficticio.
+- Los datos de prueba están marcados como ficticios y nunca se presentan como
+  propiedades reales. Los borradores reales y sus medios permanecen en
+  `.local/`, fuera del historial Git y de la web pública.
 
 ## Arranque local
 
@@ -71,7 +74,10 @@ construye `apps/marketing` y copia los archivos legados de `outputs/` y
 
 `/dappbaloinmobiliaria/outputs/prototipo_orlando_barraza_balo_inmobiliaria.html`
 
-El despliegue sigue siendo manual y requiere la aprobación de Orlando.
+Los cambios de código llegan a `main` únicamente por PR desde `dev`. Una vez
+activado el CMS, Orlando podrá aprobar una revisión desde el portal; esa acción
+iniciará el único workflow autorizado de GitHub Pages y no confirmará la
+publicación hasta recibir su resultado firmado.
 
 ## Estado de infraestructura
 

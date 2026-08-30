@@ -8,3 +8,4 @@ tmp/
 playwright-report/
 test-results/
 documents/*.inspect.ndjson
+.local/property-media/
