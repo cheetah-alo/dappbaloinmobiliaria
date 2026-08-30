@@ -5,6 +5,7 @@ un dominio. Ningún punto se activa desde CI.
 
 ## Cuentas y dominio
 
+- [x] Número público de WhatsApp confirmado por Orlando: `+51 936 242 247`.
 - [ ] Orlando posee la organización/repositorio GitHub y habilita GitHub Pages
       con **GitHub Actions** como fuente. Configurar el entorno `github-pages`
       con Orlando como revisor requerido: el texto de aprobación del workflow
@@ -20,6 +21,10 @@ un dominio. Ningún punto se activa desde CI.
 
 - [ ] Configurar Turnstile en el formulario y guardar `TURNSTILE_SECRET` como
       secreto del Worker.
+- [ ] Configurar en la web `VITE_PUBLIC_API_URL`, la clave pública
+      `VITE_TURNSTILE_SITE_KEY` y el número oficial `VITE_BALO_WHATSAPP`. No
+      introducir secretos en variables `VITE_*`, porque quedan visibles en el
+      navegador.
 - [ ] Configurar `GATEWAY_URL` y `GATEWAY_HMAC_SECRET` como secretos del
       Worker; poner el mismo HMAC en Apps Script. Verificar que la firma se
       transmite dentro del sobre POST y nunca mediante parámetros de URL.

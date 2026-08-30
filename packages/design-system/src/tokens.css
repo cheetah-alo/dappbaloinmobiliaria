@@ -1,0 +1,68 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Public+Sans:wght@400;500;600;700&display=swap');
+
+:root {
+  --balo-petrol-950: #071e22;
+  --balo-petrol-900: #0c2b30;
+  --balo-petrol-800: #123a41;
+  --balo-petrol-700: #1a4d55;
+  --balo-petrol-600: #24626b;
+  --balo-petrol-200: #c7dee1;
+  --balo-petrol-100: #e6f1f2;
+  --balo-terracotta-700: #9c4a30;
+  --balo-terracotta-600: #b85c3d;
+  --balo-sand-300: #e6bd8d;
+  --balo-sand-100: #faf0e3;
+  --balo-jade-700: #1f6b52;
+  --balo-jade-100: #e3f6ec;
+  --balo-warm-white: #faf8f4;
+  --balo-paper: #f3f0ea;
+  --balo-neutral-900: #1c1b19;
+  --balo-neutral-800: #2c2a26;
+  --balo-neutral-700: #453f38;
+  --balo-neutral-600: #655d52;
+  --balo-neutral-500: #786f65;
+  --balo-neutral-300: #cec8bd;
+  --balo-neutral-200: #e4e0d8;
+  --balo-white: #ffffff;
+
+  --balo-bg: var(--balo-warm-white);
+  --balo-surface: var(--balo-white);
+  --balo-surface-muted: var(--balo-paper);
+  --balo-text: var(--balo-neutral-900);
+  --balo-text-secondary: var(--balo-neutral-700);
+  --balo-text-tertiary: var(--balo-neutral-600);
+  --balo-brand: var(--balo-petrol-800);
+  --balo-brand-hover: var(--balo-petrol-700);
+  --balo-accent: var(--balo-terracotta-700);
+  --balo-accent-soft: var(--balo-sand-100);
+  --balo-border: var(--balo-neutral-200);
+  --balo-border-strong: var(--balo-neutral-300);
+  --balo-focus: var(--balo-petrol-600);
+
+  --balo-font-display: 'Plus Jakarta Sans', system-ui, sans-serif;
+  --balo-font-editorial: 'Cormorant Garamond', Georgia, serif;
+  --balo-font-body: 'Public Sans', system-ui, sans-serif;
+
+  --balo-space-1: 4px;
+  --balo-space-2: 8px;
+  --balo-space-3: 12px;
+  --balo-space-4: 16px;
+  --balo-space-5: 20px;
+  --balo-space-6: 24px;
+  --balo-space-7: 32px;
+  --balo-space-8: 40px;
+  --balo-space-9: 48px;
+  --balo-space-10: 64px;
+  --balo-space-11: 80px;
+  --balo-space-12: 96px;
+
+  --balo-radius-xs: 3px;
+  --balo-radius-sm: 6px;
+  --balo-radius-md: 10px;
+  --balo-radius-lg: 18px;
+  --balo-shadow-sm: 0 8px 24px rgba(7, 30, 34, 0.07);
+  --balo-shadow-lg: 0 24px 70px rgba(7, 30, 34, 0.11);
+  --balo-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --balo-duration: 180ms;
+  --balo-container: 1180px;
+}

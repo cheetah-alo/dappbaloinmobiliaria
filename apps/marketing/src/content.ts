@@ -1,0 +1,80 @@
+export const landingContent = {
+  announcement: 'Atención inmobiliaria directa en Lima',
+  navigation: [
+    { label: 'Vender', href: '#vender' },
+    { label: 'Comprar', href: '#comprar' },
+    { label: 'Cómo trabajamos', href: '#metodo' },
+    { label: 'Contacto', href: '#contacto' },
+  ],
+  hero: {
+    eyebrow: 'Balo Inmobiliaria · Lima',
+    titleStart: 'Tu propiedad,',
+    titleEmphasis: 'bien representada.',
+    titleEnd: 'Tu decisión, siempre clara.',
+    body: 'Orlando y Balo combinan conversación directa, una presentación cuidada y seguimiento claro para vender, comprar o alquilar con confianza.',
+    primaryAction: 'Quiero conversar sobre mi propiedad',
+    secondaryAction: 'Conocer el método Balo',
+    reassurance: 'Sin respuestas en serie. Sin decisiones a ciegas.',
+    noteLabel: 'La forma Balo',
+    noteTitle: 'Elegancia sin distancia.',
+    noteBody: 'Primero entendemos la propiedad y lo que necesitas. Después acordamos cómo presentarla y qué paso conviene dar.',
+    noteSignature: 'Orlando Barraza · atención personal',
+  },
+  principles: [
+    { label: 'Atención directa', text: 'Hablas con personas que conocen tu caso.' },
+    { label: 'Criterio', text: 'Cada recomendación tiene un porqué.' },
+    { label: 'Presentación', text: 'Tu propiedad se muestra con intención.' },
+    { label: 'Claridad', text: 'Siempre sabes qué ocurrió y qué sigue.' },
+  ],
+  selling: {
+    eyebrow: 'Vender con Balo',
+    title: 'Una buena propiedad no necesita ruido. Necesita presencia.',
+    intro: 'La venta se prepara con calma y se ejecuta con rigor: entendemos el momento, cuidamos la presentación y construimos una conversación que haga justicia a tu inmueble.',
+    points: [
+      { number: '01', label: 'Escucha', title: 'Conocemos antes de proponer.', text: 'Prioridades, tiempos, documentación y el carácter de tu propiedad. El plan comienza con una conversación franca.' },
+      { number: '02', label: 'Presentación', title: 'Mostramos con intención.', text: 'Imagen, relato, precio y canales se alinean antes de publicar. Nada sale sin tu aprobación.' },
+      { number: '03', label: 'Acompañamiento', title: 'Seguimos con claridad.', text: 'Consultas, visitas, comentarios y próximos pasos se ordenan para que tengas contexto al decidir.' },
+    ],
+  },
+  method: {
+    eyebrow: 'El método Balo',
+    title: 'Cercanos en la relación. Precisos en la ejecución.',
+    intro: 'La atención es personal; el proceso, ordenado. La tecnología queda detrás y sirve para conversar mejor, responder a tiempo y decidir con información.',
+    steps: [
+      { number: '01', title: 'Definimos el punto de partida', text: 'Objetivo, tiempos, condiciones, documentación y el perfil de comprador o arrendatario.', label: 'Escucha' },
+      { number: '02', title: 'Preparamos una salida a medida', text: 'Presentación, narrativa, precio y canales elegidos para esa propiedad.', label: 'Criterio' },
+      { number: '03', title: 'Cuidamos cada conversación', text: 'Interés, visita y comentarios atendidos con rapidez, contexto y discreción.', label: 'Presencia' },
+      { number: '04', title: 'Acompañamos la decisión', text: 'Oferta, negociación y cierre explicados con claridad antes de avanzar.', label: 'Confianza' },
+    ],
+  },
+  buying: {
+    eyebrow: 'Comprar con Balo',
+    title: 'Ver menos. Elegir mejor.',
+    intro: 'Una búsqueda útil comienza entendiendo cómo quieres vivir, qué estás dispuesto a decidir y qué no quieres negociar.',
+    stages: [
+      { number: '01', title: 'La conversación', text: 'Presupuesto, zona, tiempos y criterios no negociables antes de abrir un listado.' },
+      { number: '02', title: 'La selección', text: 'Opciones con sentido y visitas preparadas para comparar lo importante.' },
+      { number: '03', title: 'La decisión', text: 'Observaciones honestas, próximos pasos claros y acompañamiento hasta el cierre.' },
+    ],
+  },
+  followUp: {
+    eyebrow: 'Seguimiento',
+    title: 'La tranquilidad de estar siempre al tanto.',
+    body: 'La cercanía también se demuestra cuando no tienes que perseguir una respuesta. Balo ordena cada avance y te explica lo que significa para tu decisión.',
+    items: [
+      { label: 'Presentación', text: 'Materiales y publicación acordados contigo.' },
+      { label: 'Interés', text: 'Consultas y visitas revisadas con contexto.' },
+      { label: 'Decisión', text: 'Recomendación clara antes del siguiente paso.' },
+    ],
+  },
+  contact: {
+    eyebrow: 'Una conversación directa',
+    title: 'Hablemos de lo que estás por decidir.',
+    body: 'Venta, alquiler, compra o inversión: cuéntanos el punto de partida. Te responderemos con contexto, no con un discurso genérico.',
+    links: [
+      { label: 'Perfil profesional de Orlando', href: 'https://web.tecprendimiento.com/card/orlandobarraza' },
+      { label: 'Propiedades y novedades en Instagram', href: 'https://www.instagram.com/orlandoasesori/' },
+    ],
+  },
+  footer: 'Balo Inmobiliaria · Lima, Perú · Atención cercana y criterio inmobiliario para decisiones importantes.',
+} as const;
