@@ -13,6 +13,9 @@ un dominio. Ningún punto se activa desde CI.
 - [ ] Orlando registra y paga el dominio. Se define `www` y la redirección del
       dominio raíz; no usar una cuenta del equipo técnico como titular.
 - [ ] Orlando crea la cuenta/zona Cloudflare y concede acceso mínimo al equipo.
+- [ ] Orlando activa la suscripción R2 después de revisar el nivel gratuito y
+      la facturación por exceso. Crear espacios separados para borradores y
+      variantes públicas; no usar una cuenta del equipo técnico.
 - [ ] Orlando crea el Google Sheet y Drive del piloto y mantiene la propiedad.
 - [ ] Las APIs (Meta/WhatsApp/TikTok u otras) se crean con negocio, permisos y
       credenciales oficiales de Orlando. No se reutilizan tokens de pruebas.
@@ -36,6 +39,23 @@ un dominio. Ningún punto se activa desde CI.
 - [ ] Configurar `TEAM_DOMAIN` y `POLICY_AUD` del Worker desde la aplicación
       Access de Orlando; comprobar que una petición sin
       `Cf-Access-Jwt-Assertion` recibe rechazo.
+- [ ] Vincular al Worker dos buckets R2 de Orlando: uno privado para cargas y
+      otro para variantes publicables. El navegador sube mediante el proxy
+      firmado del Worker; los buckets no se hacen públicos ni requieren CORS.
+- [ ] Guardar como secreto el token GitHub de Orlando limitado a este
+      repositorio y permiso de Actions. No registrar secretos en
+      `wrangler.jsonc` ni logs; los tokens de carga deben caducar en cinco
+      minutos.
+- [ ] Configurar en el entorno `github-pages` el token de exportación y secreto
+      de callback; verificar HMAC, trabajo y versión antes de aceptar un
+      resultado de despliegue.
+- [ ] Configurar `CATALOG_EXPORT_BASE_URL` con la URL del Worker. Compartir el
+      mismo valor secreto entre `BUILD_EXPORT_SECRET` del Worker y
+      `CATALOG_EXPORT_SECRET` de GitHub, y entre `BUILD_CALLBACK_SECRET` del
+      Worker y `CATALOG_CALLBACK_HMAC_SECRET` de GitHub.
+- [ ] Confirmar que `catalog-publish.yml` es el único workflow con permiso para
+      escribir Pages y que el entorno `github-pages` exige la aprobación de
+      Orlando.
 - [ ] Deshabilitar o no enrutar cualquier URL alternativa del portal que evite
       Access. Verificar reglas directamente en la cuenta del cliente.
 - [ ] Validar texto de consentimiento, retención, derechos de acceso y canal de
@@ -48,7 +68,13 @@ un dominio. Ningún punto se activa desde CI.
 - [ ] Rechazar un sobre HMAC caducado o con firma alterada y verificar que no
       genera una fila ni expone una firma en URL o auditoría.
 - [ ] Validar que un gestor solo ve sus registros y que Orlando aprueba precio,
-      publicación, comisión, descuento y cierre.
+      fotografías, publicación, comisión, descuento y cierre.
+- [ ] Probar una propiedad ficticia completa: borrador, imágenes WebP sin EXIF,
+      revisión, aprobación, estado `publishing`, despliegue y callback. Simular
+      un fallo y confirmar que la revisión pública anterior sigue activa.
+- [ ] Comprobar que la exportación no contiene dirección exacta, propietario,
+      documentos, negociación ni precio interno, y que una ficha sin
+      aprobación de precio muestra `Consultar`.
 - [ ] Probar el flujo de Orlando: asignar un lead, revisar una actividad,
       resolver una solicitud y confirmar que la decisión y su motivo aparecen
       en `Aprobaciones` y `Auditoria`.

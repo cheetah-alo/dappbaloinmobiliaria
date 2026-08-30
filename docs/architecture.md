@@ -24,12 +24,18 @@ La presentación visual se desacopla de las aplicaciones mediante
 contenido para poder iterar sin alterar el formulario ni los controles de
 seguridad. Véase [`docs/design-system.md`](design-system.md).
 
-El catálogo público se incorporará como páginas estáticas indexables en
-`/propiedades/` y `/propiedades/<slug>/`. Durante el piloto se genera desde una
-exportación pública validada de Sheets; después podrá consultar un endpoint de
-solo lectura del Worker. En ambos casos, únicamente expone inmuebles con
-publicación aprobada y disponibilidad vigente, según
-[`property-catalog.md`](property-catalog.md).
+El catálogo público se genera como páginas estáticas indexables en
+`/propiedades/` y `/propiedades/<slug>/`. El CMS conserva datos y revisiones en
+Sheets; el Worker produce una exportación pública validada de todo el catálogo,
+y un único workflow la convierte con una sola plantilla en HTML, metadatos Open
+Graph y sitemap. No se mantienen fichas HTML manuales. Únicamente se exportan
+los campos públicos aprobados y una disponibilidad vigente, según
+[`property-publishing.md`](property-publishing.md).
+
+El ciclo de borrador, fotografías privadas, aprobación, trabajo de publicación
+y callback de GitHub Pages se detalla en
+[`property-publishing.md`](property-publishing.md). La revisión pública anterior
+permanece activa ante cualquier fallo de almacenamiento, gateway o despliegue.
 
 ## Límites de confianza
 
@@ -80,3 +86,11 @@ correos reales solo se cargan desde la cuenta de Orlando durante la activación.
 | `POST /v1/ops/leads/:id/activities` | Responsable o Orlando | Actividad, visita u oferta trazable |
 | `POST /v1/ops/approvals` | Responsable o Orlando | Solicitud pendiente de decisión |
 | `POST /v1/ops/approvals/:id/decision` | Orlando | Aprobación o rechazo con motivo y auditoría |
+| `GET/POST /v1/ops/properties` | Usuario autorizado | Listado asignado o nuevo borrador |
+| `GET/PUT /v1/ops/properties/:id` | Responsable o Orlando | Revisión visible o guardado con control de versión |
+| `POST /v1/ops/properties/:id/media/intents` | Responsable o Orlando | Autorización de cargas WebP por cinco minutos |
+| `POST /v1/ops/properties/:id/submit` | Responsable o Orlando | Solicitud de aprobación con autorización fotográfica |
+| `POST /v1/ops/properties/:id/publish` | Orlando | Trabajo de publicación; nunca éxito antes del callback |
+| `POST /v1/ops/properties/:id/availability` | Orlando | Estado comercial y reconstrucción completa del catálogo |
+| `GET /v1/build/catalog/:jobId` | GitHub Actions | Exportación temporal sin campos privados |
+| `POST /v1/build/catalog/:jobId/result` | GitHub Actions | Resultado firmado, correlacionado e idempotente |
