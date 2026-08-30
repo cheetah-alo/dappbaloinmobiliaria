@@ -1,0 +1,119 @@
+name: Publish approved Balo catalog
+
+on:
+  workflow_dispatch:
+    inputs:
+      job_id:
+        description: Worker build job identifier
+        required: true
+        type: string
+      snapshot_version:
+        description: Expected validated CatalogExport snapshot version
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build-catalog:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Download validated CatalogExport from Worker
+        env:
+          EXPORT_BASE_URL: ${{ secrets.CATALOG_EXPORT_BASE_URL }}
+          EXPORT_SECRET: ${{ secrets.CATALOG_EXPORT_SECRET }}
+          JOB_ID: ${{ inputs.job_id }}
+        run: |
+          test -n "$EXPORT_BASE_URL" && test -n "$EXPORT_SECRET"
+          curl --fail-with-body --silent --show-error \
+            --header "authorization: Bearer $EXPORT_SECRET" \
+            "$EXPORT_BASE_URL/v1/build/catalog/$JOB_ID" \
+            --output "$RUNNER_TEMP/catalog-response.json"
+      - name: Verify and unwrap the validated CatalogExport
+        env:
+          EXPECTED_SNAPSHOT_VERSION: ${{ inputs.snapshot_version }}
+        run: |
+          [[ "$EXPECTED_SNAPSHOT_VERSION" =~ ^[1-9][0-9]*$ ]]
+          jq -e --arg expected "$EXPECTED_SNAPSHOT_VERSION" \
+            '.ok == true and (.data.snapshotVersion | tostring) == $expected and (.data.properties | type) == "array"' \
+            "$RUNNER_TEMP/catalog-response.json" >/dev/null
+          jq -e '.data' "$RUNNER_TEMP/catalog-response.json" > "$RUNNER_TEMP/catalog-export.json"
+      - run: npm ci
+      - name: Build marketing from validated CatalogExport
+        env:
+          CATALOG_SNAPSHOT_PATH: ${{ runner.temp }}/catalog-export.json
+        run: npm run build --workspace=@balo/marketing
+      - name: Preserve legacy public outputs
+        run: cp -R outputs apps/marketing/dist/outputs
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: apps/marketing/dist
+
+  deploy-pages:
+    needs: build-catalog
+    runs-on: ubuntu-latest
+    outputs:
+      page_url: ${{ steps.deployment.outputs.page_url }}
+    environment:
+      name: github-pages
+    steps:
+      - name: Deploy approved Pages artifact
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+  report-result:
+    needs: [build-catalog, deploy-pages]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report final deployment result to Worker
+        env:
+          WORKER_BASE_URL: ${{ secrets.CATALOG_EXPORT_BASE_URL }}
+          CALLBACK_SECRET: ${{ secrets.CATALOG_CALLBACK_HMAC_SECRET }}
+          JOB_ID: ${{ inputs.job_id }}
+          EXPECTED_SNAPSHOT_VERSION: ${{ inputs.snapshot_version }}
+          BUILD_RESULT: ${{ needs.build-catalog.result }}
+          DEPLOY_RESULT: ${{ needs.deploy-pages.result }}
+          PAGE_URL: ${{ needs.deploy-pages.outputs.page_url }}
+        run: |
+          test -n "$WORKER_BASE_URL" && test -n "$CALLBACK_SECRET"
+          [[ "$EXPECTED_SNAPSHOT_VERSION" =~ ^[1-9][0-9]*$ ]]
+          if [ "$BUILD_RESULT" = success ] && [ "$DEPLOY_RESULT" = success ]; then
+            STATUS=succeeded
+            ERROR_CODE=
+          else
+            STATUS=failed
+            ERROR_CODE="PAGES_${BUILD_RESULT}_${DEPLOY_RESULT}"
+          fi
+          PAYLOAD="$(jq -cn \
+            --arg jobId "$JOB_ID" \
+            --argjson snapshotVersion "$EXPECTED_SNAPSHOT_VERSION" \
+            --arg status "$STATUS" \
+            --arg deploymentUrl "$PAGE_URL" \
+            --arg errorCode "$ERROR_CODE" \
+            '{jobId: $jobId, snapshotVersion: $snapshotVersion, status: $status}
+             + (if $deploymentUrl != "" and $status == "succeeded" then {deploymentUrl: $deploymentUrl} else {} end)
+             + (if $errorCode != "" then {errorCode: $errorCode} else {} end)')"
+          SIGNATURE="$(printf '%s' "$PAYLOAD" | openssl dgst -sha256 -hmac "$CALLBACK_SECRET" -hex | sed 's/^.* //')"
+          curl --fail-with-body --silent --show-error --request POST "$WORKER_BASE_URL/v1/build/catalog/$JOB_ID/result" \
+            --header 'content-type: application/json' \
+            --header "x-balo-signature: sha256=$SIGNATURE" \
+            --data "$PAYLOAD"
+      - name: Workflow summary
+        if: always()
+        run: |
+          echo "## Resultado de publicación Balo" >> "$GITHUB_STEP_SUMMARY"
+          echo "El Worker recibe el resultado firmado después del intento de despliegue." >> "$GITHUB_STEP_SUMMARY"
